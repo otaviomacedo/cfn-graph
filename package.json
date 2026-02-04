@@ -1,6 +1,6 @@
 {
-  "name": "cfn-graph-parser",
-  "version": "1.0.0",
+  "name": "cfn-graph",
+  "version": "0.0.1",
   "description": "CloudFormation template parser with graph manipulation",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -14,6 +14,14 @@
   "keywords": ["cloudformation", "parser", "graph"],
   "author": "",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/otaviom/cfn-graph.git"
+  },
+  "bugs": {
+    "url": "https://github.com/otaviom/cfn-graph/issues"
+  },
+  "homepage": "https://github.com/otaviom/cfn-graph#readme",
   "devDependencies": {
     "@types/jest": "^29.5.0",
     "@types/node": "^20.0.0",
