@@ -378,5 +378,32 @@ describe('CloudFormationParser', () => {
       
       expect(node?.metadata).toEqual({ CustomKey: 'CustomValue' });
     });
+
+    test('should parse resource policies', () => {
+      const template: CloudFormationTemplate = {
+        Resources: {
+          ASG: {
+            Type: 'AWS::AutoScaling::AutoScalingGroup',
+            Properties: {},
+            CreationPolicy: {
+              ResourceSignal: { Timeout: 'PT15M' }
+            },
+            UpdatePolicy: {
+              AutoScalingRollingUpdate: { MinInstancesInService: 1 }
+            },
+            DeletionPolicy: 'Retain',
+            UpdateReplacePolicy: 'Snapshot'
+          }
+        }
+      };
+
+      const graph = parser.parse(template, 'stack1');
+      const node = graph.getNode('stack1.ASG');
+      
+      expect(node?.metadata?.CreationPolicy).toEqual({ ResourceSignal: { Timeout: 'PT15M' } });
+      expect(node?.metadata?.UpdatePolicy).toEqual({ AutoScalingRollingUpdate: { MinInstancesInService: 1 } });
+      expect(node?.metadata?.DeletionPolicy).toBe('Retain');
+      expect(node?.metadata?.UpdateReplacePolicy).toBe('Snapshot');
+    });
   });
 });

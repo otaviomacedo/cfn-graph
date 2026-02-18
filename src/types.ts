@@ -14,6 +14,10 @@ export interface Resource {
   DependsOn?: string | string[];
   Condition?: string;
   Metadata?: Record<string, any>;
+  CreationPolicy?: Record<string, any>;
+  DeletionPolicy?: string;
+  UpdatePolicy?: Record<string, any>;
+  UpdateReplacePolicy?: string;
 }
 
 export interface Output {

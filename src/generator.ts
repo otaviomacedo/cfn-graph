@@ -44,7 +44,15 @@ export class CloudFormationGenerator {
       };
 
       if (node.metadata) {
-        resource.Metadata = node.metadata;
+        const { CreationPolicy, DeletionPolicy, UpdatePolicy, UpdateReplacePolicy, ...otherMetadata } = node.metadata;
+        
+        if (Object.keys(otherMetadata).length > 0) {
+          resource.Metadata = otherMetadata;
+        }
+        if (CreationPolicy) resource.CreationPolicy = CreationPolicy;
+        if (DeletionPolicy) resource.DeletionPolicy = DeletionPolicy;
+        if (UpdatePolicy) resource.UpdatePolicy = UpdatePolicy;
+        if (UpdateReplacePolicy) resource.UpdateReplacePolicy = UpdateReplacePolicy;
       }
 
       // Add DependsOn from edges (only within same stack)

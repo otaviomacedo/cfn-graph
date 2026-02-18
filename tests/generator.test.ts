@@ -146,6 +146,51 @@ describe('CloudFormationGenerator', () => {
       expect(template.Resources.Bucket.Metadata).toEqual({ CustomKey: 'CustomValue' });
     });
 
+    test('should generate resource policies', () => {
+      const graph = new CloudFormationGraph();
+      const node: GraphNode = {
+        id: 'stack1.ASG',
+        type: 'AWS::AutoScaling::AutoScalingGroup',
+        properties: {},
+        metadata: {
+          CreationPolicy: { ResourceSignal: { Timeout: 'PT15M' } },
+          UpdatePolicy: { AutoScalingRollingUpdate: { MinInstancesInService: 1 } },
+          DeletionPolicy: 'Retain',
+          UpdateReplacePolicy: 'Snapshot'
+        },
+        stackId: 'stack1'
+      };
+
+      graph.addNode(node);
+      const template = generator.generate(graph, 'stack1');
+
+      expect(template.Resources.ASG.CreationPolicy).toEqual({ ResourceSignal: { Timeout: 'PT15M' } });
+      expect(template.Resources.ASG.UpdatePolicy).toEqual({ AutoScalingRollingUpdate: { MinInstancesInService: 1 } });
+      expect(template.Resources.ASG.DeletionPolicy).toBe('Retain');
+      expect(template.Resources.ASG.UpdateReplacePolicy).toBe('Snapshot');
+      expect(template.Resources.ASG.Metadata).toBeUndefined();
+    });
+
+    test('should separate resource policies from metadata', () => {
+      const graph = new CloudFormationGraph();
+      const node: GraphNode = {
+        id: 'stack1.Bucket',
+        type: 'AWS::S3::Bucket',
+        properties: {},
+        metadata: {
+          CustomKey: 'CustomValue',
+          DeletionPolicy: 'Retain'
+        },
+        stackId: 'stack1'
+      };
+
+      graph.addNode(node);
+      const template = generator.generate(graph, 'stack1');
+
+      expect(template.Resources.Bucket.DeletionPolicy).toBe('Retain');
+      expect(template.Resources.Bucket.Metadata).toEqual({ CustomKey: 'CustomValue' });
+    });
+
     test('should not include cross-stack DependsOn', () => {
       const graph = new CloudFormationGraph();
       const bucket: GraphNode = {
@@ -365,6 +410,25 @@ describe('CloudFormationGenerator', () => {
       expect(generatedTemplate.Resources.Queue.DependsOn).toBe('Bucket');
       expect(generatedTemplate.Resources.Bucket.Properties).toBeDefined();
       expect(generatedTemplate.Resources.Bucket.Properties!.BucketName).toBe('test-bucket');
+    });
+
+    test('should preserve resource policies through round-trip', () => {
+      const originalTemplate: CloudFormationTemplate = {
+        Resources: {
+          ASG: {
+            Type: 'AWS::AutoScaling::AutoScalingGroup',
+            Properties: {},
+            DeletionPolicy: 'Retain',
+            UpdateReplacePolicy: 'Snapshot'
+          }
+        }
+      };
+
+      const graph = parser.parse(originalTemplate, 'stack1');
+      const generatedTemplate = generator.generate(graph, 'stack1');
+
+      expect(generatedTemplate.Resources.ASG.DeletionPolicy).toBe('Retain');
+      expect(generatedTemplate.Resources.ASG.UpdateReplacePolicy).toBe('Snapshot');
     });
 
     test('should preserve exports through round-trip', () => {

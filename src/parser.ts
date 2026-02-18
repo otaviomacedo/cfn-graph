@@ -11,7 +11,13 @@ export class CloudFormationParser {
         id: this.getQualifiedId(stackId, resourceId),
         type: resource.Type,
         properties: resource.Properties || {},
-        metadata: resource.Metadata,
+        metadata: {
+          ...resource.Metadata,
+          ...(resource.CreationPolicy && { CreationPolicy: resource.CreationPolicy }),
+          ...(resource.DeletionPolicy && { DeletionPolicy: resource.DeletionPolicy }),
+          ...(resource.UpdatePolicy && { UpdatePolicy: resource.UpdatePolicy }),
+          ...(resource.UpdateReplacePolicy && { UpdateReplacePolicy: resource.UpdateReplacePolicy })
+        },
         stackId
       };
       graph.addNode(node);
