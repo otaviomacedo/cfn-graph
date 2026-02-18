@@ -26,7 +26,7 @@ describe('CloudFormationParser', () => {
       const nodes = graph.getAllNodes();
 
       expect(nodes).toHaveLength(1);
-      expect(nodes[0].id).toBe('test-stack::MyBucket');
+      expect(nodes[0].id).toBe('test-stack.MyBucket');
       expect(nodes[0].type).toBe('AWS::S3::Bucket');
       expect(nodes[0].properties.BucketName).toBe('test-bucket');
     });
@@ -47,12 +47,12 @@ describe('CloudFormationParser', () => {
       };
 
       const graph = parser.parse(template, 'stack1');
-      const edges = graph.getEdges('stack1::Queue');
+      const edges = graph.getEdges('stack1.Queue');
       const dependsOnEdge = edges.find(e => e.type === EdgeType.DEPENDS_ON);
 
       expect(dependsOnEdge).toBeDefined();
-      expect(dependsOnEdge?.from).toBe('stack1::Queue');
-      expect(dependsOnEdge?.to).toBe('stack1::Bucket');
+      expect(dependsOnEdge?.from).toBe('stack1.Queue');
+      expect(dependsOnEdge?.to).toBe('stack1.Bucket');
     });
 
     test('should parse multiple DependsOn as array', () => {
@@ -75,11 +75,11 @@ describe('CloudFormationParser', () => {
       };
 
       const graph = parser.parse(template, 'stack1');
-      const deps = graph.getDependencies('stack1::Queue');
+      const deps = graph.getDependencies('stack1.Queue');
 
       expect(deps).toHaveLength(2);
-      expect(deps).toContain('stack1::Bucket1');
-      expect(deps).toContain('stack1::Bucket2');
+      expect(deps).toContain('stack1.Bucket1');
+      expect(deps).toContain('stack1.Bucket2');
     });
 
     test('should parse Ref intrinsic functions', () => {
@@ -99,11 +99,11 @@ describe('CloudFormationParser', () => {
       };
 
       const graph = parser.parse(template, 'stack1');
-      const edges = graph.getEdges('stack1::Subscription');
+      const edges = graph.getEdges('stack1.Subscription');
       const refEdge = edges.find(e => e.type === EdgeType.REFERENCE);
 
       expect(refEdge).toBeDefined();
-      expect(refEdge?.to).toBe('stack1::Topic');
+      expect(refEdge?.to).toBe('stack1.Topic');
     });
 
     test('should parse Fn::GetAtt intrinsic functions', () => {
@@ -128,11 +128,11 @@ describe('CloudFormationParser', () => {
       };
 
       const graph = parser.parse(template, 'stack1');
-      const edges = graph.getEdges('stack1::Topic');
+      const edges = graph.getEdges('stack1.Topic');
       const getAttEdge = edges.find(e => e.type === EdgeType.REFERENCE);
 
       expect(getAttEdge).toBeDefined();
-      expect(getAttEdge?.to).toBe('stack1::Queue');
+      expect(getAttEdge?.to).toBe('stack1.Queue');
     });
 
     test('should parse exports in outputs', () => {
@@ -156,18 +156,18 @@ describe('CloudFormationParser', () => {
       const graph = parser.parse(template, 'stack1');
       
       // Check export node was created
-      const exportNode = graph.getNode('stack1::Export::VPCId');
+      const exportNode = graph.getNode('stack1.Export.VPCId');
       expect(exportNode).toBeDefined();
       expect(exportNode?.type).toBe('AWS::CloudFormation::Export');
       expect(exportNode?.properties.Name).toBe('MyVPCId');
 
       // Check export was registered
-      expect(graph.getExportNode('MyVPCId')).toBe('stack1::Export::VPCId');
+      expect(graph.getExportNode('MyVPCId')).toBe('stack1.Export.VPCId');
 
       // Check export links to VPC
-      const edges = graph.getEdges('stack1::Export::VPCId');
+      const edges = graph.getEdges('stack1.Export.VPCId');
       const exportEdge = edges.find(e => e.type === EdgeType.EXPORT);
-      expect(exportEdge?.to).toBe('stack1::VPC');
+      expect(exportEdge?.to).toBe('stack1.VPC');
     });
   });
 
@@ -240,7 +240,7 @@ describe('CloudFormationParser', () => {
       expect(crossStackEdges.length).toBeGreaterThan(0);
 
       const importEdge = crossStackEdges.find(
-        e => e.type === EdgeType.IMPORT_VALUE && e.from === 'app::SecurityGroup'
+        e => e.type === EdgeType.IMPORT_VALUE && e.from === 'app.SecurityGroup'
       );
       expect(importEdge).toBeDefined();
       expect(importEdge?.crossStack).toBe(true);
@@ -319,7 +319,7 @@ describe('CloudFormationParser', () => {
       };
 
       const graph = parser.parse(template, 'stack1');
-      const node = graph.getNode('stack1::Bucket');
+      const node = graph.getNode('stack1.Bucket');
       
       expect(node).toBeDefined();
       expect(node?.properties).toEqual({});
@@ -354,8 +354,8 @@ describe('CloudFormationParser', () => {
       };
 
       const graph = parser.parse(template, 'stack1');
-      const edges = graph.getEdges('stack1::Policy');
-      const refEdges = edges.filter(e => e.type === EdgeType.REFERENCE && e.to === 'stack1::Bucket');
+      const edges = graph.getEdges('stack1.Policy');
+      const refEdges = edges.filter(e => e.type === EdgeType.REFERENCE && e.to === 'stack1.Bucket');
       
       expect(refEdges.length).toBeGreaterThan(0);
     });
@@ -374,7 +374,7 @@ describe('CloudFormationParser', () => {
       };
 
       const graph = parser.parse(template, 'stack1');
-      const node = graph.getNode('stack1::Bucket');
+      const node = graph.getNode('stack1.Bucket');
       
       expect(node?.metadata).toEqual({ CustomKey: 'CustomValue' });
     });

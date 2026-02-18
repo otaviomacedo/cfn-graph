@@ -69,7 +69,7 @@ export class CloudFormationGenerator {
       template.Outputs = template.Outputs || {};
       
       for (const exportNode of exportNodes) {
-        const outputId = this.getLocalId(exportNode.id).replace('Export::', '');
+        const outputId = this.getLocalId(exportNode.id).replace('Export.', '');
         const output: Output = {
           Value: exportNode.properties.Value,
           Export: {
@@ -171,7 +171,7 @@ export class CloudFormationGenerator {
   }
 
   private getLocalId(qualifiedId: string): string {
-    const parts = qualifiedId.split('::');
-    return parts.length > 1 ? parts.slice(1).join('::') : qualifiedId;
+    const parts = qualifiedId.split('.');
+    return parts.length > 1 ? parts.slice(1).join('.') : qualifiedId;
   }
 }

@@ -16,7 +16,7 @@ describe('CloudFormationGenerator', () => {
     test('should generate a simple template', () => {
       const graph = new CloudFormationGraph();
       const node: GraphNode = {
-        id: 'stack1::Bucket',
+        id: 'stack1.Bucket',
         type: 'AWS::S3::Bucket',
         properties: { BucketName: 'test-bucket' },
         stackId: 'stack1'
@@ -34,13 +34,13 @@ describe('CloudFormationGenerator', () => {
     test('should include DependsOn in generated template', () => {
       const graph = new CloudFormationGraph();
       const bucket: GraphNode = {
-        id: 'stack1::Bucket',
+        id: 'stack1.Bucket',
         type: 'AWS::S3::Bucket',
         properties: {},
         stackId: 'stack1'
       };
       const queue: GraphNode = {
-        id: 'stack1::Queue',
+        id: 'stack1.Queue',
         type: 'AWS::SQS::Queue',
         properties: {},
         stackId: 'stack1'
@@ -49,8 +49,8 @@ describe('CloudFormationGenerator', () => {
       graph.addNode(bucket);
       graph.addNode(queue);
       graph.addEdge({
-        from: 'stack1::Queue',
-        to: 'stack1::Bucket',
+        from: 'stack1.Queue',
+        to: 'stack1.Bucket',
         type: EdgeType.DEPENDS_ON
       });
 
@@ -62,19 +62,19 @@ describe('CloudFormationGenerator', () => {
     test('should include multiple DependsOn as array', () => {
       const graph = new CloudFormationGraph();
       const bucket1: GraphNode = {
-        id: 'stack1::Bucket1',
+        id: 'stack1.Bucket1',
         type: 'AWS::S3::Bucket',
         properties: {},
         stackId: 'stack1'
       };
       const bucket2: GraphNode = {
-        id: 'stack1::Bucket2',
+        id: 'stack1.Bucket2',
         type: 'AWS::S3::Bucket',
         properties: {},
         stackId: 'stack1'
       };
       const queue: GraphNode = {
-        id: 'stack1::Queue',
+        id: 'stack1.Queue',
         type: 'AWS::SQS::Queue',
         properties: {},
         stackId: 'stack1'
@@ -84,13 +84,13 @@ describe('CloudFormationGenerator', () => {
       graph.addNode(bucket2);
       graph.addNode(queue);
       graph.addEdge({
-        from: 'stack1::Queue',
-        to: 'stack1::Bucket1',
+        from: 'stack1.Queue',
+        to: 'stack1.Bucket1',
         type: EdgeType.DEPENDS_ON
       });
       graph.addEdge({
-        from: 'stack1::Queue',
-        to: 'stack1::Bucket2',
+        from: 'stack1.Queue',
+        to: 'stack1.Bucket2',
         type: EdgeType.DEPENDS_ON
       });
 
@@ -110,7 +110,7 @@ describe('CloudFormationGenerator', () => {
         stackId: 'stack1'
       };
       const exportNode: GraphNode = {
-        id: 'stack1::Export::VPC',
+        id: 'stack1.Export.VPC',
         type: 'AWS::CloudFormation::Export',
         properties: {
           Name: 'MyVPCId',
@@ -121,7 +121,7 @@ describe('CloudFormationGenerator', () => {
 
       graph.addNode(vpc);
       graph.addNode(exportNode);
-      graph.registerExport('MyVPCId', 'stack1::Export::VPC');
+      graph.registerExport('MyVPCId', 'stack1.Export.VPC');
 
       const template = generator.generate(graph, 'stack1');
 
@@ -133,7 +133,7 @@ describe('CloudFormationGenerator', () => {
     test('should include metadata in generated resources', () => {
       const graph = new CloudFormationGraph();
       const node: GraphNode = {
-        id: 'stack1::Bucket',
+        id: 'stack1.Bucket',
         type: 'AWS::S3::Bucket',
         properties: {},
         metadata: { CustomKey: 'CustomValue' },
@@ -149,13 +149,13 @@ describe('CloudFormationGenerator', () => {
     test('should not include cross-stack DependsOn', () => {
       const graph = new CloudFormationGraph();
       const bucket: GraphNode = {
-        id: 'stack1::Bucket',
+        id: 'stack1.Bucket',
         type: 'AWS::S3::Bucket',
         properties: {},
         stackId: 'stack1'
       };
       const queue: GraphNode = {
-        id: 'stack2::Queue',
+        id: 'stack2.Queue',
         type: 'AWS::SQS::Queue',
         properties: {},
         stackId: 'stack2'
@@ -164,8 +164,8 @@ describe('CloudFormationGenerator', () => {
       graph.addNode(bucket);
       graph.addNode(queue);
       graph.addEdge({
-        from: 'stack2::Queue',
-        to: 'stack1::Bucket',
+        from: 'stack2.Queue',
+        to: 'stack1.Bucket',
         type: EdgeType.DEPENDS_ON,
         crossStack: true
       });
@@ -180,13 +180,13 @@ describe('CloudFormationGenerator', () => {
     test('should generate multiple templates', () => {
       const graph = new CloudFormationGraph();
       const bucket: GraphNode = {
-        id: 'stack1::Bucket',
+        id: 'stack1.Bucket',
         type: 'AWS::S3::Bucket',
         properties: {},
         stackId: 'stack1'
       };
       const queue: GraphNode = {
-        id: 'stack2::Queue',
+        id: 'stack2.Queue',
         type: 'AWS::SQS::Queue',
         properties: {},
         stackId: 'stack2'
@@ -205,13 +205,13 @@ describe('CloudFormationGenerator', () => {
     test('should generate separate templates for each stack', () => {
       const graph = new CloudFormationGraph();
       const bucket: GraphNode = {
-        id: 'stack1::Bucket',
+        id: 'stack1.Bucket',
         type: 'AWS::S3::Bucket',
         properties: {},
         stackId: 'stack1'
       };
       const queue: GraphNode = {
-        id: 'stack2::Queue',
+        id: 'stack2.Queue',
         type: 'AWS::SQS::Queue',
         properties: {},
         stackId: 'stack2'
@@ -266,13 +266,13 @@ describe('CloudFormationGenerator', () => {
 
       // Move SecurityGroup's reference to create cross-stack scenario
       // In reality, this would happen through moveNode, but we'll simulate the graph state
-      const sgNode = graph.getNode('app::SecurityGroup');
+      const sgNode = graph.getNode('app.SecurityGroup');
       if (sgNode) {
         // Add import edge
         const exportNodeId = graph.getExportNode('NetworkStack-VPCId');
         if (exportNodeId) {
           graph.addEdge({
-            from: 'app::SecurityGroup',
+            from: 'app.SecurityGroup',
             to: exportNodeId,
             type: EdgeType.IMPORT_VALUE,
             crossStack: true
@@ -319,7 +319,7 @@ describe('CloudFormationGenerator', () => {
       ]);
 
       // Move Subscription to services stack
-      graph.moveNode('infra::Subscription', 'services', 'Subscription');
+      graph.moveNode('infra.Subscription', 'services', 'Subscription');
 
       const templates = generator.generateMultiple(graph);
       const infraTemplate = templates.get('infra')!;
@@ -405,7 +405,7 @@ describe('CloudFormationGenerator', () => {
     test('should handle resources without properties', () => {
       const graph = new CloudFormationGraph();
       const node: GraphNode = {
-        id: 'stack1::Bucket',
+        id: 'stack1.Bucket',
         type: 'AWS::S3::Bucket',
         properties: {},
         stackId: 'stack1'
@@ -421,7 +421,7 @@ describe('CloudFormationGenerator', () => {
     test('should handle complex nested properties', () => {
       const graph = new CloudFormationGraph();
       const node: GraphNode = {
-        id: 'stack1::Policy',
+        id: 'stack1.Policy',
         type: 'AWS::IAM::Policy',
         properties: {
           PolicyDocument: {

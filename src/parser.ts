@@ -23,7 +23,7 @@ export class CloudFormationParser {
         if (output.Export) {
           const exportName = this.resolveExportName(output.Export.Name);
           const node: GraphNode = {
-            id: this.getQualifiedId(stackId, `Export::${outputId}`),
+            id: this.getQualifiedId(stackId, `Export.${outputId}`),
             type: 'AWS::CloudFormation::Export',
             properties: {
               Name: exportName,
@@ -49,7 +49,7 @@ export class CloudFormationParser {
     if (template.Outputs) {
       for (const [outputId, output] of Object.entries(template.Outputs)) {
         if (output.Export) {
-          const exportNodeId = this.getQualifiedId(stackId, `Export::${outputId}`);
+          const exportNodeId = this.getQualifiedId(stackId, `Export.${outputId}`);
           const sourceRefs = this.findReferences(output.Value);
           for (const ref of sourceRefs) {
             const sourceId = this.getQualifiedId(stackId, ref);
@@ -113,7 +113,7 @@ export class CloudFormationParser {
   }
 
   private getQualifiedId(stackId: string, resourceId: string): string {
-    return `${stackId}::${resourceId}`;
+    return `${stackId}.${resourceId}`;
   }
 
   private resolveExportName(name: any): string {

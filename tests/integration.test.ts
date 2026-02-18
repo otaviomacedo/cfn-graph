@@ -33,7 +33,7 @@ describe('Integration Tests', () => {
 
       // Manipulate - add a new node
       graph.addNode({
-        id: 'stack1::Topic',
+        id: 'stack1.Topic',
         type: 'AWS::SNS::Topic',
         properties: { TopicName: 'new-topic' },
         stackId: 'stack1'
@@ -41,8 +41,8 @@ describe('Integration Tests', () => {
 
       // Manipulate - add edge
       graph.addEdge({
-        from: 'stack1::Queue',
-        to: 'stack1::Topic',
+        from: 'stack1.Queue',
+        to: 'stack1.Topic',
         type: EdgeType.DEPENDS_ON
       });
 
@@ -116,7 +116,7 @@ describe('Integration Tests', () => {
       };
 
       const graph = parser.parse(template, 'stack1');
-      graph.moveNode('stack1::OldBucketName', 'stack1', 'NewBucketName');
+      graph.moveNode('stack1.OldBucketName', 'stack1', 'NewBucketName');
 
       const newTemplate = generator.generate(graph, 'stack1');
 
@@ -149,7 +149,7 @@ describe('Integration Tests', () => {
         { stackId: 'stack2', template: stack2 }
       ]);
 
-      graph.moveNode('stack1::Bucket', 'stack2', 'Bucket');
+      graph.moveNode('stack1.Bucket', 'stack2', 'Bucket');
 
       const templates = generator.generateMultiple(graph);
       
@@ -199,16 +199,16 @@ describe('Integration Tests', () => {
       expect(refEdgeBefore?.crossStack).toBeFalsy();
 
       // Move subscription to services stack
-      graph.moveNode('infra::Subscription', 'services', 'Subscription');
+      graph.moveNode('infra.Subscription', 'services', 'Subscription');
 
       // After move - verify cross-stack import
-      const edgesAfter = graph.getEdges('services::Subscription');
+      const edgesAfter = graph.getEdges('services.Subscription');
       const importEdge = edgesAfter.find(e => e.type === EdgeType.IMPORT_VALUE);
       expect(importEdge).toBeDefined();
       expect(importEdge?.crossStack).toBe(true);
 
       // Verify export was created
-      const exportNode = graph.getNode('infra::Export::Topic');
+      const exportNode = graph.getNode('infra.Export.Topic');
       expect(exportNode).toBeDefined();
       expect(exportNode?.type).toBe('AWS::CloudFormation::Export');
 
@@ -267,7 +267,7 @@ describe('Integration Tests', () => {
       ]);
 
       // Move function to stack2
-      graph.moveNode('stack1::Function', 'stack2', 'Function');
+      graph.moveNode('stack1.Function', 'stack2', 'Function');
 
       // Verify exports were created for both buckets
       const exports = graph.getExports();
@@ -304,23 +304,23 @@ describe('Integration Tests', () => {
       const graph = parser.parse(template, 'stack1');
       
       graph.addEdge({
-        from: 'stack1::Resource1',
-        to: 'stack1::Resource2',
+        from: 'stack1.Resource1',
+        to: 'stack1.Resource2',
         type: EdgeType.DEPENDS_ON
       });
 
       graph.addEdge({
-        from: 'stack1::Resource2',
-        to: 'stack1::Resource1',
+        from: 'stack1.Resource2',
+        to: 'stack1.Resource1',
         type: EdgeType.DEPENDS_ON
       });
 
       // Graph allows circular dependencies (CloudFormation will catch this at deploy time)
-      const deps1 = graph.getDependencies('stack1::Resource1');
-      const deps2 = graph.getDependencies('stack1::Resource2');
+      const deps1 = graph.getDependencies('stack1.Resource1');
+      const deps2 = graph.getDependencies('stack1.Resource2');
 
-      expect(deps1).toContain('stack1::Resource2');
-      expect(deps2).toContain('stack1::Resource1');
+      expect(deps1).toContain('stack1.Resource2');
+      expect(deps2).toContain('stack1.Resource1');
     });
 
     test('should handle deeply nested resource references', () => {
@@ -352,8 +352,8 @@ describe('Integration Tests', () => {
       };
 
       const graph = parser.parse(template, 'stack1');
-      const edges = graph.getEdges('stack1::Policy');
-      const refEdges = edges.filter(e => e.type === EdgeType.REFERENCE && e.to === 'stack1::Bucket');
+      const edges = graph.getEdges('stack1.Policy');
+      const refEdges = edges.filter(e => e.type === EdgeType.REFERENCE && e.to === 'stack1.Bucket');
 
       expect(refEdges.length).toBeGreaterThan(0);
     });
@@ -380,7 +380,7 @@ describe('Integration Tests', () => {
       const graph = parser.parse(template, 'stack1');
       
       // Remove bucket (and its edges)
-      graph.removeNode('stack1::Bucket');
+      graph.removeNode('stack1.Bucket');
 
       const newTemplate = generator.generate(graph, 'stack1');
 
@@ -394,7 +394,7 @@ describe('Integration Tests', () => {
   describe('Utility Functions', () => {
     test('should parse and create node IDs correctly', () => {
       const nodeId = createNodeId('mystack', 'MyResource');
-      expect(nodeId).toBe('mystack::MyResource');
+      expect(nodeId).toBe('mystack.MyResource');
 
       const parsed = parseNodeId(nodeId);
       expect(parsed.stackId).toBe('mystack');
@@ -402,11 +402,11 @@ describe('Integration Tests', () => {
     });
 
     test('should handle complex logical IDs', () => {
-      const nodeId = createNodeId('stack1', 'Export::VPC');
+      const nodeId = createNodeId('stack1', 'Export.VPC');
       const parsed = parseNodeId(nodeId);
 
       expect(parsed.stackId).toBe('stack1');
-      expect(parsed.logicalId).toBe('Export::VPC');
+      expect(parsed.logicalId).toBe('Export.VPC');
     });
 
     test('should throw error for invalid node IDs', () => {

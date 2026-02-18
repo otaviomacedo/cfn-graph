@@ -201,7 +201,7 @@ export class CloudFormationGraph {
       if (!exportName || !exportNodeId) {
         const targetLogicalId = this.getLogicalId(targetNode.id);
         exportName = `${targetNode.stackId}-${targetLogicalId}`;
-        exportNodeId = this.getQualifiedId(targetNode.stackId!, `Export::${targetLogicalId}`);
+        exportNodeId = this.getQualifiedId(targetNode.stackId!, `Export.${targetLogicalId}`);
 
         // Create export node
         const exportNode: GraphNode = {
@@ -242,7 +242,7 @@ export class CloudFormationGraph {
   }
 
   private getQualifiedId(stackId: string, logicalId: string): string {
-    return `${stackId}::${logicalId}`;
+    return `${stackId}.${logicalId}`;
   }
 
   getStackId(qualifiedId: string): string | undefined {
@@ -251,7 +251,41 @@ export class CloudFormationGraph {
   }
 
   getLogicalId(qualifiedId: string): string {
-    const parts = qualifiedId.split('::');
-    return parts.length > 1 ? parts.slice(1).join('::') : qualifiedId;
+    const parts = qualifiedId.split('.');
+    return parts.length > 1 ? parts.slice(1).join('.') : qualifiedId;
+  }
+
+  /**
+   * Returns all nodes in topologically sorted order based on their dependencies.
+   * If a circular dependency is detected, an error is thrown.
+   */
+  getAllNodesSorted(): GraphNode[] {
+    const visited = new Set<string>();
+    const temp = new Set<string>();
+    const result: string[] = [];
+
+    const visit = (nodeId: string): void => {
+      if (temp.has(nodeId)) {
+        throw new Error('Circular dependency detected');
+      }
+      if (visited.has(nodeId)) return;
+
+      temp.add(nodeId);
+      const deps = this.getDependencies(nodeId);
+      for (const dep of deps) {
+        visit(dep);
+      }
+      temp.delete(nodeId);
+      visited.add(nodeId);
+      result.push(nodeId);
+    };
+
+    for (const nodeId of this.nodes.keys()) {
+      if (!visited.has(nodeId)) {
+        visit(nodeId);
+      }
+    }
+
+    return result.map(id => this.nodes.get(id)!);
   }
 }
