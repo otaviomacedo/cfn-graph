@@ -288,4 +288,23 @@ export class CloudFormationGraph {
 
     return result.map(id => this.nodes.get(id)!);
   }
+
+  /**
+   * Returns a copy of this graph with all edge directions reversed.
+   */
+  opposite(): CloudFormationGraph {
+    const reversed = new CloudFormationGraph();
+
+    reversed.nodes = this.nodes;
+
+    for (const edge of this.edges) {
+      reversed.edges.push({ ...edge, from: edge.to, to: edge.from });
+    }
+    
+    for (const [exportName, nodeId] of this.exports.entries()) {
+      reversed.exports.set(exportName, nodeId);
+    }
+    
+    return reversed;
+  }
 }

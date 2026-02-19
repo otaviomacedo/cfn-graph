@@ -482,5 +482,124 @@ describe('CloudFormationGraph', () => {
       expect(() => graph.getAllNodesSorted()).toThrow('Circular dependency detected');
     });
   });
+
+  describe('Graph Reversal', () => {
+    test('should reverse edge directions', () => {
+      const bucket: GraphNode = {
+        id: 'stack1::Bucket',
+        type: 'AWS::S3::Bucket',
+        properties: {},
+        stackId: 'stack1'
+      };
+      const queue: GraphNode = {
+        id: 'stack1::Queue',
+        type: 'AWS::SQS::Queue',
+        properties: {},
+        stackId: 'stack1'
+      };
+
+      graph.addNode(bucket);
+      graph.addNode(queue);
+      graph.addEdge({ from: 'stack1::Queue', to: 'stack1::Bucket', type: EdgeType.DEPENDS_ON });
+
+      const reversed = graph.opposite();
+      const edges = reversed.getEdges();
+
+      expect(edges).toHaveLength(1);
+      expect(edges[0].from).toBe('stack1::Bucket');
+      expect(edges[0].to).toBe('stack1::Queue');
+      expect(edges[0].type).toBe(EdgeType.DEPENDS_ON);
+    });
+
+    test('should preserve all nodes', () => {
+      const bucket: GraphNode = {
+        id: 'stack1::Bucket',
+        type: 'AWS::S3::Bucket',
+        properties: {},
+        stackId: 'stack1'
+      };
+      const queue: GraphNode = {
+        id: 'stack1::Queue',
+        type: 'AWS::SQS::Queue',
+        properties: {},
+        stackId: 'stack1'
+      };
+
+      graph.addNode(bucket);
+      graph.addNode(queue);
+
+      const reversed = graph.opposite();
+
+      expect(reversed.getAllNodes()).toHaveLength(2);
+      expect(reversed.getNode('stack1::Bucket')).toEqual(bucket);
+      expect(reversed.getNode('stack1::Queue')).toEqual(queue);
+    });
+
+    test('should preserve exports', () => {
+      const exportNode: GraphNode = {
+        id: 'stack1::Export::VPC',
+        type: 'AWS::CloudFormation::Export',
+        properties: { Name: 'MyVPC' },
+        stackId: 'stack1'
+      };
+
+      graph.addNode(exportNode);
+      graph.registerExport('MyVPC', 'stack1::Export::VPC');
+
+      const reversed = graph.opposite();
+
+      expect(reversed.getExportNode('MyVPC')).toBe('stack1::Export::VPC');
+      expect(reversed.getExports().size).toBe(1);
+    });
+
+    test('should reverse dependencies and dependents', () => {
+      const bucket: GraphNode = {
+        id: 'stack1::Bucket',
+        type: 'AWS::S3::Bucket',
+        properties: {},
+        stackId: 'stack1'
+      };
+      const queue: GraphNode = {
+        id: 'stack1::Queue',
+        type: 'AWS::SQS::Queue',
+        properties: {},
+        stackId: 'stack1'
+      };
+
+      graph.addNode(bucket);
+      graph.addNode(queue);
+      graph.addEdge({ from: 'stack1::Queue', to: 'stack1::Bucket', type: EdgeType.DEPENDS_ON });
+
+      const reversed = graph.opposite();
+
+      expect(reversed.getDependencies('stack1::Bucket')).toEqual(['stack1::Queue']);
+      expect(reversed.getDependents('stack1::Queue')).toEqual(['stack1::Bucket']);
+    });
+
+    test('should preserve crossStack flag on edges', () => {
+      const node1: GraphNode = {
+        id: 'stack1::Bucket',
+        type: 'AWS::S3::Bucket',
+        properties: {},
+        stackId: 'stack1'
+      };
+      const node2: GraphNode = {
+        id: 'stack2::Queue',
+        type: 'AWS::SQS::Queue',
+        properties: {},
+        stackId: 'stack2'
+      };
+
+      graph.addNode(node1);
+      graph.addNode(node2);
+      graph.addEdge({ from: 'stack2::Queue', to: 'stack1::Bucket', type: EdgeType.IMPORT_VALUE, crossStack: true });
+
+      const reversed = graph.opposite();
+      const edges = reversed.getCrossStackEdges();
+
+      expect(edges).toHaveLength(1);
+      expect(edges[0].crossStack).toBe(true);
+    });
+  });
 });
 
