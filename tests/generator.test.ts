@@ -364,7 +364,7 @@ describe('CloudFormationGenerator', () => {
       ]);
 
       // Move Subscription to services stack
-      graph.moveNode('infra.Subscription', 'services', 'Subscription');
+      graph.moveNode({ stackId: 'infra', logicalId: 'Subscription' }, { stackId: 'services', logicalId: 'Subscription' });
 
       const templates = generator.generateMultiple(graph);
       const infraTemplate = templates.get('infra')!;

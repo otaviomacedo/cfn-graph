@@ -68,7 +68,7 @@ console.log();
 // Example 1: Rename a node within the same stack
 console.log('=== Example 1: Rename LogsBucket to AuditLogsBucket ===\n');
 const logsBucketId = createNodeId('storage', 'LogsBucket');
-graph.moveNode(logsBucketId, 'storage', 'AuditLogsBucket');
+graph.moveNode({ stackId: 'storage', logicalId: 'LogsBucket' }, { stackId: 'storage', logicalId: 'AuditLogsBucket' });
 
 console.log('Storage stack nodes:', graph.getNodesByStack('storage').map(n => parseNodeId(n.id).logicalId));
 console.log();
@@ -85,7 +85,7 @@ console.log('  Queue edges:', graph.getEdges(queueId).map(e => ({
   crossStack: e.crossStack
 })));
 
-graph.moveNode(queueId, 'app', 'Queue');
+graph.moveNode({ stackId: 'storage', logicalId: 'Queue' }, { stackId: 'app', logicalId: 'Queue' });
 const newQueueId = createNodeId('app', 'Queue');
 
 console.log('\nAfter move:');
@@ -103,7 +103,7 @@ console.log();
 // Example 3: Move and rename in one operation
 console.log('=== Example 3: Move Function to storage stack and rename to DataProcessor ===\n');
 const functionId = createNodeId('app', 'Function');
-graph.moveNode(functionId, 'storage', 'DataProcessor');
+graph.moveNode({ stackId: 'app', logicalId: 'Function' }, { stackId: 'storage', logicalId: 'DataProcessor' });
 
 console.log('Storage stack nodes:', graph.getNodesByStack('storage').map(n => parseNodeId(n.id).logicalId));
 console.log('App stack nodes:', graph.getNodesByStack('app').map(n => parseNodeId(n.id).logicalId));
@@ -207,7 +207,7 @@ for (const edge of edgesBefore) {
 
 // Move MySubscription to services stack
 console.log('\nMoving MySubscription from infra to services stack...');
-graph2.moveNode(subscriptionId, 'services', 'MySubscription');
+graph2.moveNode({ stackId: 'infra', logicalId: 'MySubscription' }, { stackId: 'services', logicalId: 'MySubscription' });
 const newSubscriptionId = createNodeId('services', 'MySubscription');
 
 console.log('\nAfter move:');

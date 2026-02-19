@@ -298,7 +298,7 @@ describe('CloudFormationGraph', () => {
     });
 
     test('should rename node within same stack', () => {
-      graph.moveNode('stack1.Bucket', 'stack1', 'DataBucket');
+      graph.moveNode({ stackId: 'stack1', logicalId: 'Bucket' }, { stackId: 'stack1', logicalId: 'DataBucket' });
 
       expect(graph.getNode('stack1.Bucket')).toBeUndefined();
       expect(graph.getNode('stack1.DataBucket')).toBeDefined();
@@ -306,7 +306,7 @@ describe('CloudFormationGraph', () => {
     });
 
     test('should move node to different stack', () => {
-      graph.moveNode('stack1.Bucket', 'stack2', 'Bucket');
+      graph.moveNode({ stackId: 'stack1', logicalId: 'Bucket' }, { stackId: 'stack2', logicalId: 'Bucket' });
 
       expect(graph.getNode('stack1.Bucket')).toBeUndefined();
       expect(graph.getNode('stack2.Bucket')).toBeDefined();
@@ -320,7 +320,7 @@ describe('CloudFormationGraph', () => {
         type: EdgeType.DEPENDS_ON
       });
 
-      graph.moveNode('stack1.Bucket', 'stack2', 'Bucket');
+      graph.moveNode({ stackId: 'stack1', logicalId: 'Bucket' }, { stackId: 'stack2', logicalId: 'Bucket' });
 
       const edges = graph.getEdges('stack1.Queue');
       expect(edges[0].to).toBe('stack2.Bucket');
@@ -329,13 +329,13 @@ describe('CloudFormationGraph', () => {
 
     test('should throw error when target location exists', () => {
       expect(() => {
-        graph.moveNode('stack1.Bucket', 'stack1', 'Queue');
+        graph.moveNode({ stackId: 'stack1', logicalId: 'Bucket' }, { stackId: 'stack1', logicalId: 'Queue' });
       }).toThrow('Target location stack1.Queue already exists');
     });
 
     test('should throw error when node does not exist', () => {
       expect(() => {
-        graph.moveNode('stack1.NonExistent', 'stack2', 'Test');
+        graph.moveNode({ stackId: 'stack1', logicalId: 'NonExistent' }, { stackId: 'stack2', logicalId: 'Test' });
       }).toThrow('Node stack1.NonExistent does not exist');
     });
 
@@ -362,7 +362,7 @@ describe('CloudFormationGraph', () => {
       });
 
       // Move subscription to different stack
-      graph.moveNode('stack1.Subscription', 'stack2', 'Subscription');
+      graph.moveNode({ stackId: 'stack1', logicalId: 'Subscription' }, { stackId: 'stack2', logicalId: 'Subscription' });
 
       // Check that export was created
       const exportNode = graph.getNode('stack1.Export.Topic');
@@ -378,7 +378,7 @@ describe('CloudFormationGraph', () => {
 
     test('should update export registrations when moving exported node', () => {
       graph.registerExport('MyBucket', 'stack1.Bucket');
-      graph.moveNode('stack1.Bucket', 'stack2', 'Bucket');
+      graph.moveNode({ stackId: 'stack1', logicalId: 'Bucket' }, { stackId: 'stack2', logicalId: 'Bucket' });
 
       expect(graph.getExportNode('MyBucket')).toBe('stack2.Bucket');
     });

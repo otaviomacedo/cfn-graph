@@ -116,7 +116,7 @@ describe('Integration Tests', () => {
       };
 
       const graph = parser.parse(template, 'stack1');
-      graph.moveNode('stack1.OldBucketName', 'stack1', 'NewBucketName');
+      graph.moveNode({ stackId: 'stack1', logicalId: 'OldBucketName' }, { stackId: 'stack1', logicalId: 'NewBucketName' });
 
       const newTemplate = generator.generate(graph, 'stack1');
 
@@ -149,7 +149,7 @@ describe('Integration Tests', () => {
         { stackId: 'stack2', template: stack2 }
       ]);
 
-      graph.moveNode('stack1.Bucket', 'stack2', 'Bucket');
+      graph.moveNode({ stackId: 'stack1', logicalId: 'Bucket' }, { stackId: 'stack2', logicalId: 'Bucket' });
 
       const templates = generator.generateMultiple(graph);
       
@@ -199,7 +199,7 @@ describe('Integration Tests', () => {
       expect(refEdgeBefore?.crossStack).toBeFalsy();
 
       // Move subscription to services stack
-      graph.moveNode('infra.Subscription', 'services', 'Subscription');
+      graph.moveNode({ stackId: 'infra', logicalId: 'Subscription' }, { stackId: 'services', logicalId: 'Subscription' });
 
       // After move - verify cross-stack import
       const edgesAfter = graph.getEdges('services.Subscription');
@@ -267,7 +267,7 @@ describe('Integration Tests', () => {
       ]);
 
       // Move function to stack2
-      graph.moveNode('stack1.Function', 'stack2', 'Function');
+      graph.moveNode({ stackId: 'stack1', logicalId: 'Function' }, { stackId: 'stack2', logicalId: 'Function' });
 
       // Verify exports were created for both buckets
       const exports = graph.getExports();

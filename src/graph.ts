@@ -1,4 +1,4 @@
-import { GraphNode, GraphEdge, EdgeType } from './types';
+import { GraphNode, GraphEdge, EdgeType, NodeLocation } from './types';
 
 export class CloudFormationGraph {
   private nodes: Map<string, GraphNode> = new Map();
@@ -87,14 +87,14 @@ export class CloudFormationGraph {
     return Array.from(stacks);
   }
 
-  moveNode(currentId: string, newStackId: string, newLogicalId: string): void {
+  moveNode(from: NodeLocation, to: NodeLocation): void {
+    const currentId = this.getQualifiedId(from.stackId, from.logicalId);
     const node = this.nodes.get(currentId);
     if (!node) {
       throw new Error(`Node ${currentId} does not exist`);
     }
 
-    const currentStackId = node.stackId;
-    const newQualifiedId = this.getQualifiedId(newStackId, newLogicalId);
+    const newQualifiedId = this.getQualifiedId(to.stackId, to.logicalId);
     
     // Check if target location already exists
     if (newQualifiedId !== currentId && this.nodes.has(newQualifiedId)) {
@@ -106,13 +106,13 @@ export class CloudFormationGraph {
       return;
     }
 
-    const isMovingAcrossStacks = currentStackId !== newStackId;
+    const isMovingAcrossStacks = from.stackId !== to.stackId;
 
     // Create new node with updated location
     const movedNode: GraphNode = {
       ...node,
       id: newQualifiedId,
-      stackId: newStackId
+      stackId: to.stackId
     };
 
     // Track edges that need to be converted to cross-stack references
@@ -129,11 +129,11 @@ export class CloudFormationGraph {
         // Check if this edge needs to become a cross-stack reference
         const toNode = this.nodes.get(edge.to);
         if (toNode && isMovingAcrossStacks) {
-          if (toNode.stackId !== newStackId && edge.type === EdgeType.REFERENCE) {
+          if (toNode.stackId !== to.stackId && edge.type === EdgeType.REFERENCE) {
             // This in-stack reference needs to become a cross-stack import
             edgesToConvert.push({ edge: updatedEdge, targetNode: toNode });
           }
-          updatedEdge.crossStack = toNode.stackId !== newStackId;
+          updatedEdge.crossStack = toNode.stackId !== to.stackId;
         }
       }
       
@@ -143,7 +143,7 @@ export class CloudFormationGraph {
         // Update crossStack flag if moving between stacks
         const fromNode = this.nodes.get(edge.from);
         if (fromNode && isMovingAcrossStacks) {
-          updatedEdge.crossStack = fromNode.stackId !== newStackId;
+          updatedEdge.crossStack = fromNode.stackId !== to.stackId;
         }
       }
       
