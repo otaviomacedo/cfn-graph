@@ -155,19 +155,8 @@ describe('CloudFormationParser', () => {
 
       const graph = parser.parse(template, 'stack1');
       
-      // Check export node was created
-      const exportNode = graph.getNode('stack1.Export.VPCId');
-      expect(exportNode).toBeDefined();
-      expect(exportNode?.type).toBe('AWS::CloudFormation::Export');
-      expect(exportNode?.properties.Name).toBe('MyVPCId');
-
-      // Check export was registered
-      expect(graph.getExportNode('MyVPCId')).toBe('stack1.Export.VPCId');
-
-      // Check export links to VPC
-      const edges = graph.getEdges('stack1.Export.VPCId');
-      const exportEdge = edges.find(e => e.type === EdgeType.EXPORT);
-      expect(exportEdge?.to).toBe('stack1.VPC');
+      // Check export was registered to VPC resource directly
+      expect(graph.getExportNode('MyVPCId')).toBe('stack1.VPC');
     });
   });
 

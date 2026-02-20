@@ -23,22 +23,16 @@ export class CloudFormationParser {
       graph.addNode(node);
     }
 
-    // Add nodes for exports
+    // Register exports (map export name to resource ID)
     if (template.Outputs) {
       for (const [outputId, output] of Object.entries(template.Outputs)) {
         if (output.Export) {
           const exportName = this.resolveExportName(output.Export.Name);
-          const node: GraphNode = {
-            id: this.getQualifiedId(stackId, `Export.${outputId}`),
-            type: 'AWS::CloudFormation::Export',
-            properties: {
-              Name: exportName,
-              Value: output.Value
-            },
-            stackId
-          };
-          graph.addNode(node);
-          graph.registerExport(exportName, node.id);
+          const sourceRefs = this.findReferences(output.Value);
+          if (sourceRefs.length > 0) {
+            const sourceId = this.getQualifiedId(stackId, sourceRefs[0]);
+            graph.registerExport(exportName, sourceId, outputId);
+          }
         }
       }
     }
@@ -49,26 +43,6 @@ export class CloudFormationParser {
       this.extractDependencies(qualifiedId, resource, graph, stackId);
       this.extractReferences(qualifiedId, resource, graph, stackId);
       this.extractImports(qualifiedId, resource, graph);
-    }
-
-    // Link exports to their source resources
-    if (template.Outputs) {
-      for (const [outputId, output] of Object.entries(template.Outputs)) {
-        if (output.Export) {
-          const exportNodeId = this.getQualifiedId(stackId, `Export.${outputId}`);
-          const sourceRefs = this.findReferences(output.Value);
-          for (const ref of sourceRefs) {
-            const sourceId = this.getQualifiedId(stackId, ref);
-            if (graph.getNode(sourceId)) {
-              graph.addEdge({
-                from: exportNodeId,
-                to: sourceId,
-                type: EdgeType.EXPORT
-              });
-            }
-          }
-        }
-      }
     }
 
     return graph;
@@ -92,25 +66,23 @@ export class CloudFormationParser {
       }
 
       // Merge exports
-      for (const [exportName, nodeId] of stackGraph.getExports()) {
-        graph.registerExport(exportName, nodeId);
+      for (const [exportName, {nodeId, outputId}] of stackGraph.getExports()) {
+        graph.registerExport(exportName, nodeId, outputId);
       }
     }
 
     // Second pass: resolve cross-stack imports
     for (const node of graph.getAllNodes()) {
-      if (node.type !== 'AWS::CloudFormation::Export') {
-        const imports = this.findImports(node.properties);
-        for (const importName of imports) {
-          const exportNodeId = graph.getExportNode(importName);
-          if (exportNodeId) {
-            graph.addEdge({
-              from: node.id,
-              to: exportNodeId,
-              type: EdgeType.IMPORT_VALUE,
-              crossStack: true
-            });
-          }
+      const imports = this.findImports(node.properties);
+      for (const importName of imports) {
+        const exportedResourceId = graph.getExportNode(importName);
+        if (exportedResourceId) {
+          graph.addEdge({
+            from: node.id,
+            to: exportedResourceId,
+            type: EdgeType.IMPORT_VALUE,
+            crossStack: true
+          });
         }
       }
     }
@@ -167,11 +139,11 @@ export class CloudFormationParser {
 
     const imports = this.findImports(resource.Properties);
     for (const importName of imports) {
-      const exportNodeId = graph.getExportNode(importName);
-      if (exportNodeId) {
+      const exportedResourceId = graph.getExportNode(importName);
+      if (exportedResourceId) {
         graph.addEdge({
           from: resourceId,
-          to: exportNodeId,
+          to: exportedResourceId,
           type: EdgeType.IMPORT_VALUE,
           crossStack: true
         });

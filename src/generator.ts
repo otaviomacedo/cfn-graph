@@ -25,10 +25,8 @@ export class CloudFormationGenerator {
       ? graph.getNodesByStack(stackId)
       : graph.getAllNodes();
 
-    // Generate resources from nodes (excluding export nodes)
+    // Generate resources from nodes
     for (const node of nodes) {
-      if (node.type === 'AWS::CloudFormation::Export') continue;
-
       const localId = this.getLocalId(node.id);
       
       // Transform properties to handle cross-stack references
@@ -71,20 +69,20 @@ export class CloudFormationGenerator {
       template.Resources[localId] = resource;
     }
 
-    // Generate outputs from export nodes
-    const exportNodes = nodes.filter(node => node.type === 'AWS::CloudFormation::Export');
-    if (exportNodes.length > 0) {
-      template.Outputs = template.Outputs || {};
-      
-      for (const exportNode of exportNodes) {
-        const outputId = this.getLocalId(exportNode.id).replace('Export.', '');
+    // Generate outputs from exports
+    const exports = graph.getExports();
+    for (const [exportName, exportInfo] of exports.entries()) {
+      const resourceNode = graph.getNode(exportInfo.nodeId);
+      if (resourceNode && resourceNode.stackId === stackId) {
+        template.Outputs = template.Outputs || {};
+        const localId = this.getLocalId(exportInfo.nodeId);
         const output: Output = {
-          Value: exportNode.properties.Value,
+          Value: { Ref: localId },
           Export: {
-            Name: exportNode.properties.Name
+            Name: exportName
           }
         };
-        template.Outputs[outputId] = output;
+        template.Outputs[exportInfo.outputId] = output;
       }
     }
 
@@ -108,15 +106,14 @@ export class CloudFormationGenerator {
     // Build a map of target node IDs to export names
     const importMap = new Map<string, string>();
     for (const edge of importEdges) {
-      const exportNode = graph.getNode(edge.to);
-      if (exportNode && exportNode.type === 'AWS::CloudFormation::Export') {
-        // Find what this export references
-        const exportEdges = graph.getEdges(edge.to).filter(
-          e => e.from === edge.to && e.type === EdgeType.EXPORT
-        );
-        for (const exportEdge of exportEdges) {
-          const targetLogicalId = this.getLocalId(exportEdge.to);
-          importMap.set(targetLogicalId, exportNode.properties.Name);
+      const targetResourceId = edge.to;
+      const targetLogicalId = this.getLocalId(targetResourceId);
+      
+      // Find the export name for this resource
+      for (const [exportName, { nodeId }] of graph.getExports().entries()) {
+        if (nodeId === targetResourceId) {
+          importMap.set(targetLogicalId, exportName);
+          break;
         }
       }
     }

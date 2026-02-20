@@ -104,30 +104,20 @@ describe('CloudFormationGenerator', () => {
     test('should generate exports in outputs', () => {
       const graph = new CloudFormationGraph();
       const vpc: GraphNode = {
-        id: 'stack1::VPC',
+        id: 'stack1.VPC',
         type: 'AWS::EC2::VPC',
         properties: {},
         stackId: 'stack1'
       };
-      const exportNode: GraphNode = {
-        id: 'stack1.Export.VPC',
-        type: 'AWS::CloudFormation::Export',
-        properties: {
-          Name: 'MyVPCId',
-          Value: { Ref: 'VPC' }
-        },
-        stackId: 'stack1'
-      };
 
       graph.addNode(vpc);
-      graph.addNode(exportNode);
-      graph.registerExport('MyVPCId', 'stack1.Export.VPC');
+      graph.registerExport('MyVPCId', 'stack1.VPC', 'VPCOutput');
 
       const template = generator.generate(graph, 'stack1');
 
       expect(template.Outputs).toBeDefined();
-      expect(template.Outputs!.VPC).toBeDefined();
-      expect(template.Outputs!.VPC.Export?.Name).toBe('MyVPCId');
+      expect(template.Outputs!.VPCOutput).toBeDefined();
+      expect(template.Outputs!.VPCOutput.Export?.Name).toBe('MyVPCId');
     });
 
     test('should include metadata in generated resources', () => {

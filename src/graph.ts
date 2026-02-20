@@ -3,7 +3,7 @@ import { GraphNode, GraphEdge, EdgeType, NodeLocation } from './types';
 export class CloudFormationGraph {
   private nodes: Map<string, GraphNode> = new Map();
   private edges: GraphEdge[] = [];
-  private exports: Map<string, string> = new Map(); // exportName -> nodeId
+  private exports: Map<string, { nodeId: string; outputId: string }> = new Map(); // exportName -> { nodeId, outputId }
 
   addNode(node: GraphNode): void {
     this.nodes.set(node.id, node);
@@ -14,8 +14,8 @@ export class CloudFormationGraph {
     this.edges = this.edges.filter(edge => edge.from !== id && edge.to !== id);
     
     // Remove from exports if it's an export node
-    for (const [exportName, nodeId] of this.exports.entries()) {
-      if (nodeId === id) {
+    for (const [exportName, exportInfo] of this.exports.entries()) {
+      if (exportInfo.nodeId === id) {
         this.exports.delete(exportName);
       }
     }
@@ -65,15 +65,15 @@ export class CloudFormationGraph {
       .map(edge => edge.from);
   }
 
-  registerExport(exportName: string, nodeId: string): void {
-    this.exports.set(exportName, nodeId);
+  registerExport(exportName: string, nodeId: string, outputId?: string): void {
+    this.exports.set(exportName, { nodeId, outputId: outputId || this.getLogicalId(nodeId) });
   }
 
   getExportNode(exportName: string): string | undefined {
-    return this.exports.get(exportName);
+    return this.exports.get(exportName)?.nodeId;
   }
 
-  getExports(): Map<string, string> {
+  getExports(): Map<string, { nodeId: string; outputId: string }> {
     return new Map(this.exports);
   }
 
@@ -151,10 +151,10 @@ export class CloudFormationGraph {
     }
 
     // Update exports if this node is exported
-    const exportsToUpdate: Array<[string, string]> = [];
-    for (const [exportName, nodeId] of this.exports.entries()) {
-      if (nodeId === currentId) {
-        exportsToUpdate.push([exportName, newQualifiedId]);
+    const exportsToUpdate: Array<[string, { nodeId: string; outputId: string }]> = [];
+    for (const [exportName, exportInfo] of this.exports.entries()) {
+      if (exportInfo.nodeId === currentId) {
+        exportsToUpdate.push([exportName, { nodeId: newQualifiedId, outputId: exportInfo.outputId }]);
       }
     }
 
@@ -163,8 +163,8 @@ export class CloudFormationGraph {
     this.nodes.set(newQualifiedId, movedNode);
     this.edges = updatedEdges;
     
-    for (const [exportName, nodeId] of exportsToUpdate) {
-      this.exports.set(exportName, nodeId);
+    for (const [exportName, exportInfo] of exportsToUpdate) {
+      this.exports.set(exportName, exportInfo);
     }
 
     // Convert in-stack references to cross-stack imports
@@ -180,52 +180,22 @@ export class CloudFormationGraph {
     for (const { edge, targetNode } of edgesToConvert) {
       // Check if an export already exists for this target
       let exportName: string | undefined;
-      let exportNodeId: string | undefined;
 
-      for (const [name, nodeId] of this.exports.entries()) {
-        // Check if this export points to the target node
-        const exportNode = this.nodes.get(nodeId);
-        if (exportNode && exportNode.type === 'AWS::CloudFormation::Export') {
-          const exportEdges = this.edges.filter(
-            e => e.from === nodeId && e.to === targetNode.id && e.type === EdgeType.EXPORT
-          );
-          if (exportEdges.length > 0) {
-            exportName = name;
-            exportNodeId = nodeId;
-            break;
-          }
+      for (const [name, exportInfo] of this.exports.entries()) {
+        if (exportInfo.nodeId === targetNode.id) {
+          exportName = name;
+          break;
         }
       }
 
       // If no export exists, create one
-      if (!exportName || !exportNodeId) {
+      if (!exportName) {
         const targetLogicalId = this.getLogicalId(targetNode.id);
         exportName = `${targetNode.stackId}-${targetLogicalId}`;
-        exportNodeId = this.getQualifiedId(targetNode.stackId!, `Export.${targetLogicalId}`);
-
-        // Create export node
-        const exportNode: GraphNode = {
-          id: exportNodeId,
-          type: 'AWS::CloudFormation::Export',
-          properties: {
-            Name: exportName,
-            Value: { Ref: targetLogicalId }
-          },
-          stackId: targetNode.stackId
-        };
-
-        this.nodes.set(exportNodeId, exportNode);
-        this.exports.set(exportName, exportNodeId);
-
-        // Link export to target resource
-        this.edges.push({
-          from: exportNodeId,
-          to: targetNode.id,
-          type: EdgeType.EXPORT
-        });
+        this.exports.set(exportName, { nodeId: targetNode.id, outputId: targetLogicalId });
       }
 
-      // Update the edge to point to the export and change type to IMPORT_VALUE
+      // Update the edge to point to the exported resource and change type to IMPORT_VALUE
       const edgeIndex = this.edges.findIndex(
         e => e.from === edge.from && e.to === edge.to && e.type === edge.type
       );
@@ -233,7 +203,7 @@ export class CloudFormationGraph {
       if (edgeIndex !== -1) {
         this.edges[edgeIndex] = {
           from: movedNodeId,
-          to: exportNodeId,
+          to: targetNode.id,
           type: EdgeType.IMPORT_VALUE,
           crossStack: true
         };
@@ -301,8 +271,8 @@ export class CloudFormationGraph {
       reversed.edges.push({ ...edge, from: edge.to, to: edge.from });
     }
     
-    for (const [exportName, nodeId] of this.exports.entries()) {
-      reversed.exports.set(exportName, nodeId);
+    for (const [exportName, exportInfo] of this.exports.entries()) {
+      reversed.exports.set(exportName, exportInfo);
     }
     
     return reversed;

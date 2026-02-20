@@ -194,7 +194,7 @@ describe('Integration Tests', () => {
       ]);
 
       // Before move - verify in-stack reference
-      const edgesBefore = graph.getEdges('infra::Subscription');
+      const edgesBefore = graph.getEdges('infra.Subscription');
       const refEdgeBefore = edgesBefore.find(e => e.type === EdgeType.REFERENCE);
       expect(refEdgeBefore?.crossStack).toBeFalsy();
 
@@ -206,11 +206,12 @@ describe('Integration Tests', () => {
       const importEdge = edgesAfter.find(e => e.type === EdgeType.IMPORT_VALUE);
       expect(importEdge).toBeDefined();
       expect(importEdge?.crossStack).toBe(true);
+      expect(importEdge?.to).toBe('infra.Topic');
 
-      // Verify export was created
-      const exportNode = graph.getNode('infra.Export.Topic');
-      expect(exportNode).toBeDefined();
-      expect(exportNode?.type).toBe('AWS::CloudFormation::Export');
+      // Verify export was registered
+      const exports = graph.getExports();
+      const exportNames = Array.from(exports.keys());
+      expect(exportNames.some(name => name.includes('Topic'))).toBe(true);
 
       // Generate templates
       const templates = generator.generateMultiple(graph);
