@@ -104,6 +104,75 @@ describe('Integration Tests', () => {
     });
   });
 
+  test('should preserve Fn::GetAtt cross-stack references in the round trip', () => {
+    const networkStack: CloudFormationTemplate = {
+      Resources: {
+        VPC: {
+          Type: 'AWS::EC2::VPC',
+          Properties: { CidrBlock: '10.0.0.0/16' }
+        }
+      },
+      Outputs: {
+        VPCId: {
+          Value: { "Fn::GetAtt": ['VPC', 'Id'] },
+          Export: { Name: 'NetworkStack-VPCId' }
+        }
+      }
+    };
+
+    const appStack: CloudFormationTemplate = {
+      Resources: {
+        SecurityGroup: {
+          Type: 'AWS::EC2::SecurityGroup',
+          Properties: {
+            VpcId: { 'Fn::ImportValue': 'NetworkStack-VPCId' }
+          }
+        }
+      }
+    };
+
+    // Parse multiple stacks
+    const graph = parser.parseMultiple([
+      { stackId: 'network', template: networkStack },
+      { stackId: 'app', template: appStack }
+    ]);
+
+    // Verify cross-stack edges
+    const crossStackEdges = graph.getCrossStackEdges();
+    expect(crossStackEdges.length).toBeGreaterThan(0);
+
+    // Generate back
+    const templates = generator.generateMultiple(graph);
+    const networkTemplate = templates.get('network')!;
+    expect(networkTemplate.Outputs?.VPCId.Value).toHaveProperty('Fn::GetAtt');
+
+  });
+
+  test('should preserve Fn::GetAtt in-stack references in the round trip', () => {
+    const networkStack: CloudFormationTemplate = {
+      Resources: {
+        VPC: {
+          Type: 'AWS::EC2::VPC',
+          Properties: { CidrBlock: '10.0.0.0/16' }
+        },
+        SecurityGroup: {
+          Type: 'AWS::EC2::SecurityGroup',
+          Properties: {
+            VpcId: { 'Fn::GetAtt': ['VPC', 'Id'] }
+          }
+        }
+      },
+    };
+
+    // Parse multiple stacks
+    const graph = parser.parse(networkStack, 'network');
+
+
+    // Generate back
+    const template = generator.generate(graph);
+    expect(template.Resources?.SecurityGroup?.Properties?.VpcId).toHaveProperty('Fn::GetAtt');
+  });
+
   describe('Node Movement Scenarios', () => {
     test('should handle moving resource within same stack', () => {
       const template: CloudFormationTemplate = {

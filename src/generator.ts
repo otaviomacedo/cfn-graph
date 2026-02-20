@@ -76,8 +76,9 @@ export class CloudFormationGenerator {
       if (resourceNode && resourceNode.stackId === stackId) {
         template.Outputs = template.Outputs || {};
         const localId = this.getLocalId(exportInfo.nodeId);
+        const outputValue = exportInfo.value || { Ref: localId };
         const output: Output = {
-          Value: { Ref: localId },
+          Value: outputValue,
           Export: {
             Name: exportName
           }

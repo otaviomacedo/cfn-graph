@@ -31,7 +31,7 @@ export class CloudFormationParser {
           const sourceRefs = this.findReferences(output.Value);
           if (sourceRefs.length > 0) {
             const sourceId = this.getQualifiedId(stackId, sourceRefs[0]);
-            graph.registerExport(exportName, sourceId, outputId);
+            graph.registerExport(exportName, sourceId, outputId, output.Value);
           }
         }
       }
@@ -66,8 +66,8 @@ export class CloudFormationParser {
       }
 
       // Merge exports
-      for (const [exportName, {nodeId, outputId}] of stackGraph.getExports()) {
-        graph.registerExport(exportName, nodeId, outputId);
+      for (const [exportName, {nodeId, outputId, value}] of stackGraph.getExports()) {
+        graph.registerExport(exportName, nodeId, outputId, value);
       }
     }
 

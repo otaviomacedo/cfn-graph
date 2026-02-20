@@ -3,7 +3,7 @@ import { GraphNode, GraphEdge, EdgeType, NodeLocation } from './types';
 export class CloudFormationGraph {
   private nodes: Map<string, GraphNode> = new Map();
   private edges: GraphEdge[] = [];
-  private exports: Map<string, { nodeId: string; outputId: string }> = new Map(); // exportName -> { nodeId, outputId }
+  private exports: Map<string, { nodeId: string; outputId: string; value?: any }> = new Map(); // exportName -> { nodeId, outputId, value }
 
   addNode(node: GraphNode): void {
     this.nodes.set(node.id, node);
@@ -65,15 +65,15 @@ export class CloudFormationGraph {
       .map(edge => edge.from);
   }
 
-  registerExport(exportName: string, nodeId: string, outputId?: string): void {
-    this.exports.set(exportName, { nodeId, outputId: outputId || this.getLogicalId(nodeId) });
+  registerExport(exportName: string, nodeId: string, outputId?: string, value?: any): void {
+    this.exports.set(exportName, { nodeId, outputId: outputId || this.getLogicalId(nodeId), value });
   }
 
   getExportNode(exportName: string): string | undefined {
     return this.exports.get(exportName)?.nodeId;
   }
 
-  getExports(): Map<string, { nodeId: string; outputId: string }> {
+  getExports(): Map<string, { nodeId: string; outputId: string; value?: any }> {
     return new Map(this.exports);
   }
 
@@ -171,10 +171,10 @@ export class CloudFormationGraph {
     }
 
     // Update exports if this node is exported
-    const exportsToUpdate: Array<[string, { nodeId: string; outputId: string }]> = [];
+    const exportsToUpdate: Array<[string, { nodeId: string; outputId: string; value?: any }]> = [];
     for (const [exportName, exportInfo] of this.exports.entries()) {
       if (exportInfo.nodeId === currentId) {
-        exportsToUpdate.push([exportName, { nodeId: newQualifiedId, outputId: exportInfo.outputId }]);
+        exportsToUpdate.push([exportName, { nodeId: newQualifiedId, outputId: exportInfo.outputId, value: exportInfo.value }]);
       }
     }
 
@@ -246,7 +246,7 @@ export class CloudFormationGraph {
       if (!exportName) {
         const targetLogicalId = this.getLogicalId(targetNode.id);
         exportName = `${targetNode.stackId}-${targetLogicalId}`;
-        this.exports.set(exportName, { nodeId: targetNode.id, outputId: targetLogicalId });
+        this.exports.set(exportName, { nodeId: targetNode.id, outputId: targetLogicalId, value: { Ref: targetLogicalId } });
       }
     }
   }
