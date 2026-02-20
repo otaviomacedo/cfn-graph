@@ -395,4 +395,121 @@ describe('CloudFormationParser', () => {
       expect(node?.metadata?.UpdateReplacePolicy).toBe('Snapshot');
     });
   });
+  describe('Primitive Export Values', () => {
+    test('should not create edge when export value is a primitive string', () => {
+      const configStack: CloudFormationTemplate = {
+        Resources: {},
+        Outputs: {
+          Region: {
+            Value: 'us-east-1',
+            Export: {
+              Name: 'ConfigRegion'
+            }
+          }
+        }
+      };
+
+      const appStack: CloudFormationTemplate = {
+        Resources: {
+          Bucket: {
+            Type: 'AWS::S3::Bucket',
+            Properties: {
+              BucketName: { 'Fn::ImportValue': 'ConfigRegion' }
+            }
+          }
+        }
+      };
+
+      const graph = parser.parseMultiple([
+        { stackId: 'config', template: configStack },
+        { stackId: 'app', template: appStack }
+      ]);
+
+      // No export should be registered since there's no resource reference
+      expect(graph.getExportNode('ConfigRegion')).toBeUndefined();
+
+      // No import edge should exist
+      const importEdges = graph.getEdges('app.Bucket').filter(e => e.type === EdgeType.IMPORT_VALUE);
+      expect(importEdges).toHaveLength(0);
+    });
+
+    test('should not create edge when export value is a number', () => {
+      const configStack: CloudFormationTemplate = {
+        Resources: {},
+        Outputs: {
+          MaxSize: {
+            Value: 100,
+            Export: {
+              Name: 'ConfigMaxSize'
+            }
+          }
+        }
+      };
+
+      const appStack: CloudFormationTemplate = {
+        Resources: {
+          Queue: {
+            Type: 'AWS::SQS::Queue',
+            Properties: {
+              MaximumMessageSize: { 'Fn::ImportValue': 'ConfigMaxSize' }
+            }
+          }
+        }
+      };
+
+      const graph = parser.parseMultiple([
+        { stackId: 'config', template: configStack },
+        { stackId: 'app', template: appStack }
+      ]);
+
+      expect(graph.getExportNode('ConfigMaxSize')).toBeUndefined();
+
+      const importEdges = graph.getEdges('app.Queue').filter(e => e.type === EdgeType.IMPORT_VALUE);
+      expect(importEdges).toHaveLength(0);
+    });
+
+    test('should create edge when export value references a resource', () => {
+      const networkStack: CloudFormationTemplate = {
+        Resources: {
+          VPC: {
+            Type: 'AWS::EC2::VPC',
+            Properties: {}
+          }
+        },
+        Outputs: {
+          VPCId: {
+            Value: { Ref: 'VPC' },
+            Export: {
+              Name: 'NetworkVPC'
+            }
+          }
+        }
+      };
+
+      const appStack: CloudFormationTemplate = {
+        Resources: {
+          SecurityGroup: {
+            Type: 'AWS::EC2::SecurityGroup',
+            Properties: {
+              VpcId: { 'Fn::ImportValue': 'NetworkVPC' }
+            }
+          }
+        }
+      };
+
+      const graph = parser.parseMultiple([
+        { stackId: 'network', template: networkStack },
+        { stackId: 'app', template: appStack }
+      ]);
+
+      // Export should be registered to the VPC resource
+      expect(graph.getExportNode('NetworkVPC')).toBe('network.VPC');
+
+      // Import edge should exist pointing to VPC
+      const importEdges = graph.getEdges('app.SecurityGroup').filter(e => e.type === EdgeType.IMPORT_VALUE);
+      expect(importEdges).toHaveLength(1);
+      expect(importEdges[0].to).toBe('network.VPC');
+    });
+  });
 });
+
