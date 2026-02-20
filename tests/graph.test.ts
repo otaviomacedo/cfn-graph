@@ -314,7 +314,7 @@ describe('CloudFormationGraph', () => {
       expect(graph.getNode('stack2.Bucket')?.stackId).toBe('stack2');
     });
 
-    test('should update edges when moving node', () => {
+    test('should update edges when moving the target of an edge', () => {
       graph.addEdge({
         from: 'stack1.Queue',
         to: 'stack1.Bucket',
@@ -325,6 +325,20 @@ describe('CloudFormationGraph', () => {
 
       const edges = graph.getEdges('stack1.Queue');
       expect(edges[0].to).toBe('stack2.Bucket');
+      expect(edges[0].crossStack).toBe(true);
+    });
+
+    test('should update edges when moving the source of an edge', () => {
+      graph.addEdge({
+        from: 'stack1.Queue',
+        to: 'stack1.Bucket',
+        type: EdgeType.DEPENDS_ON
+      });
+
+      graph.moveNode({ stackId: 'stack1', logicalId: 'Queue' }, { stackId: 'stack2', logicalId: 'Queue' });
+
+      const edges = graph.getEdges('stack2.Queue');
+      expect(edges[0].to).toBe('stack1.Bucket');
       expect(edges[0].crossStack).toBe(true);
     });
 
