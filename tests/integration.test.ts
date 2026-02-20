@@ -125,6 +125,35 @@ describe('Integration Tests', () => {
       expect(newTemplate.Resources.NewBucketName.Type).toBe('AWS::S3::Bucket');
     });
 
+    test('should update references when moving resource within same stack', () => {
+      const template: CloudFormationTemplate = {
+        Resources: {
+          OldBucketName: {
+            Type: 'AWS::S3::Bucket',
+            Properties: {}
+          },
+          Function: {
+            Type: 'AWS::Lambda::Function',
+            Properties: {
+              Environment: {
+                Variables: {
+                  BUCKET: { Ref: 'OldBucketName' }
+                }
+              }
+            }
+          }
+        }
+      };
+
+      const graph = parser.parse(template, 'stack1');
+      graph.moveNode({ stackId: 'stack1', logicalId: 'OldBucketName' }, { stackId: 'stack1', logicalId: 'NewBucketName' });
+
+      const newTemplate = generator.generate(graph, 'stack1');
+
+      expect(newTemplate.Resources.NewBucketName).toBeDefined();
+      expect(newTemplate.Resources.Function.Properties!.Environment.Variables.BUCKET).toEqual({ Ref: 'NewBucketName' });
+    });
+
     test('should handle moving resource across stacks', () => {
       const stack1: CloudFormationTemplate = {
         Resources: {

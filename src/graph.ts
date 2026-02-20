@@ -107,6 +107,8 @@ export class CloudFormationGraph {
     }
 
     const isMovingAcrossStacks = from.stackId !== to.stackId;
+    const oldLogicalId = from.logicalId;
+    const newLogicalId = to.logicalId;
 
     // Create new node with updated location
     const movedNode: GraphNode = {
@@ -159,6 +161,15 @@ export class CloudFormationGraph {
       }
     }
 
+    // Update properties in nodes that reference the moved node (within same stack)
+    if (!isMovingAcrossStacks && oldLogicalId !== newLogicalId) {
+      for (const [nodeId, n] of this.nodes.entries()) {
+        if (nodeId !== currentId && n.stackId === from.stackId) {
+          n.properties = this.updateReferencesInProperties(n.properties, oldLogicalId, newLogicalId);
+        }
+      }
+    }
+
     // Update exports if this node is exported
     const exportsToUpdate: Array<[string, { nodeId: string; outputId: string }]> = [];
     for (const [exportName, exportInfo] of this.exports.entries()) {
@@ -180,6 +191,40 @@ export class CloudFormationGraph {
     if (isMovingAcrossStacks && edgesToConvert.length > 0) {
       this.convertReferencesToImports(newQualifiedId, edgesToConvert);
     }
+  }
+
+  private updateReferencesInProperties(
+    obj: any,
+    oldLogicalId: string,
+    newLogicalId: string
+  ): any {
+    if (obj === null || obj === undefined || typeof obj !== 'object') {
+      return obj;
+    }
+
+    if (Array.isArray(obj)) {
+      return obj.map(item => this.updateReferencesInProperties(item, oldLogicalId, newLogicalId));
+    }
+
+    // Update Ref intrinsic
+    if (obj.Ref === oldLogicalId) {
+      return { Ref: newLogicalId };
+    }
+
+    // Update Fn::GetAtt intrinsic
+    if (obj['Fn::GetAtt']) {
+      const attr = obj['Fn::GetAtt'];
+      if (Array.isArray(attr) && attr[0] === oldLogicalId) {
+        return { 'Fn::GetAtt': [newLogicalId, ...attr.slice(1)] };
+      }
+    }
+
+    // Recursively process object properties
+    const result: Record<string, any> = {};
+    for (const [key, value] of Object.entries(obj)) {
+      result[key] = this.updateReferencesInProperties(value, oldLogicalId, newLogicalId);
+    }
+    return result;
   }
 
   private convertReferencesToImports(
