@@ -122,32 +122,41 @@ export class CloudFormationGraph {
     const updatedEdges: GraphEdge[] = [];
     for (const edge of this.edges) {
       const updatedEdge = { ...edge };
+      let shouldKeepEdge = true;
       
       if (edge.from === currentId) {
         updatedEdge.from = newQualifiedId;
         
-        // Check if this edge needs to become a cross-stack reference
         const toNode = this.nodes.get(edge.to);
-        if (toNode && isMovingAcrossStacks) {
-          if (toNode.stackId !== to.stackId && edge.type === EdgeType.REFERENCE) {
-            // This in-stack reference needs to become a cross-stack import
-            edgesToConvert.push({ edge: updatedEdge, targetNode: toNode });
+        if (toNode && isMovingAcrossStacks && toNode.stackId !== to.stackId) {
+          if (edge.type === EdgeType.DEPENDS_ON) {
+            shouldKeepEdge = false;
+          } else if (edge.type === EdgeType.REFERENCE || edge.type === EdgeType.GET_ATT) {
+            edgesToConvert.push({ edge, targetNode: toNode });
+            updatedEdge.type = EdgeType.IMPORT_VALUE;
           }
-          updatedEdge.crossStack = toNode.stackId !== to.stackId;
+          updatedEdge.crossStack = true;
         }
       }
       
       if (edge.to === currentId) {
         updatedEdge.to = newQualifiedId;
         
-        // Update crossStack flag if moving between stacks
         const fromNode = this.nodes.get(edge.from);
-        if (fromNode && isMovingAcrossStacks) {
-          updatedEdge.crossStack = fromNode.stackId !== to.stackId;
+        if (fromNode && isMovingAcrossStacks && fromNode.stackId !== to.stackId) {
+          if (edge.type === EdgeType.DEPENDS_ON) {
+            shouldKeepEdge = false;
+          } else if (edge.type === EdgeType.REFERENCE || edge.type === EdgeType.GET_ATT) {
+            edgesToConvert.push({ edge, targetNode: movedNode });
+            updatedEdge.type = EdgeType.IMPORT_VALUE;
+          }
+          updatedEdge.crossStack = true;
         }
       }
       
-      updatedEdges.push(updatedEdge);
+      if (shouldKeepEdge) {
+        updatedEdges.push(updatedEdge);
+      }
     }
 
     // Update exports if this node is exported
@@ -177,7 +186,7 @@ export class CloudFormationGraph {
     movedNodeId: string, 
     edgesToConvert: Array<{ edge: GraphEdge; targetNode: GraphNode }>
   ): void {
-    for (const { edge, targetNode } of edgesToConvert) {
+    for (const { targetNode } of edgesToConvert) {
       // Check if an export already exists for this target
       let exportName: string | undefined;
 
@@ -193,20 +202,6 @@ export class CloudFormationGraph {
         const targetLogicalId = this.getLogicalId(targetNode.id);
         exportName = `${targetNode.stackId}-${targetLogicalId}`;
         this.exports.set(exportName, { nodeId: targetNode.id, outputId: targetLogicalId });
-      }
-
-      // Update the edge to point to the exported resource and change type to IMPORT_VALUE
-      const edgeIndex = this.edges.findIndex(
-        e => e.from === edge.from && e.to === edge.to && e.type === edge.type
-      );
-      
-      if (edgeIndex !== -1) {
-        this.edges[edgeIndex] = {
-          from: movedNodeId,
-          to: targetNode.id,
-          type: EdgeType.IMPORT_VALUE,
-          crossStack: true
-        };
       }
     }
   }

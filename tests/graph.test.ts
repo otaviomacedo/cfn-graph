@@ -318,7 +318,7 @@ describe('CloudFormationGraph', () => {
       graph.addEdge({
         from: 'stack1.Queue',
         to: 'stack1.Bucket',
-        type: EdgeType.DEPENDS_ON
+        type: EdgeType.REFERENCE
       });
 
       graph.moveNode({ stackId: 'stack1', logicalId: 'Bucket' }, { stackId: 'stack2', logicalId: 'Bucket' });
@@ -326,9 +326,38 @@ describe('CloudFormationGraph', () => {
       const edges = graph.getEdges('stack1.Queue');
       expect(edges[0].to).toBe('stack2.Bucket');
       expect(edges[0].crossStack).toBe(true);
+      expect(edges[0].type).toBe(EdgeType.IMPORT_VALUE);
+    });
+
+    test('should delete DEPENDS_ON edges when moving its target', () => {
+      graph.addEdge({
+        from: 'stack1.Queue',
+        to: 'stack1.Bucket',
+        type: EdgeType.DEPENDS_ON,
+      });
+
+      graph.moveNode({ stackId: 'stack1', logicalId: 'Bucket' }, { stackId: 'stack2', logicalId: 'Bucket' });
+
+      const edges = graph.getEdges('stack1.Queue');
+      expect(edges.length).toBe(0);
     });
 
     test('should update edges when moving the source of an edge', () => {
+      graph.addEdge({
+        from: 'stack1.Queue',
+        to: 'stack1.Bucket',
+        type: EdgeType.REFERENCE
+      });
+
+      graph.moveNode({ stackId: 'stack1', logicalId: 'Queue' }, { stackId: 'stack2', logicalId: 'Queue' });
+
+      const edges = graph.getEdges('stack2.Queue');
+      expect(edges[0].to).toBe('stack1.Bucket');
+      expect(edges[0].crossStack).toBe(true);
+      expect(edges[0].type).toBe(EdgeType.IMPORT_VALUE);
+    });
+
+    test('should delete DEPENDS_ON edges when moving its source', () => {
       graph.addEdge({
         from: 'stack1.Queue',
         to: 'stack1.Bucket',
@@ -338,8 +367,7 @@ describe('CloudFormationGraph', () => {
       graph.moveNode({ stackId: 'stack1', logicalId: 'Queue' }, { stackId: 'stack2', logicalId: 'Queue' });
 
       const edges = graph.getEdges('stack2.Queue');
-      expect(edges[0].to).toBe('stack1.Bucket');
-      expect(edges[0].crossStack).toBe(true);
+      expect(edges.length).toBe(0);
     });
 
     test('should throw error when target location exists', () => {
