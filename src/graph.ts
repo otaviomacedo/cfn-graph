@@ -309,7 +309,7 @@ export class CloudFormationGraph {
       edgesByTargetAndAttr.set(key, existing);
     }
     
-    for (const [key, edges] of edgesByTargetAndAttr.entries()) {
+    for (const edges of edgesByTargetAndAttr.values()) {
       const targetNode = edges[0].targetNode;
       const targetStackId = edges[0].targetStackId;
       const targetLogicalId = this.getLogicalId(targetNode.id);
