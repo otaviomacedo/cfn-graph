@@ -326,7 +326,7 @@ describe('Integration Tests', () => {
       expect(servicesTemplate.Resources.Subscription.Properties!.TopicArn).toHaveProperty('Fn::ImportValue');
     });
 
-    test('should convert Fn::GetAtt to cross-stack import when moving, preserving the Fn::GetAtt and attribute', () => {
+    test('should convert Fn::GetAtt to cross-stack import when moving the source of an edge, preserving the Fn::GetAtt and attribute', () => {
       const infraStack: CloudFormationTemplate = {
         Resources: {
           Table: {
@@ -373,6 +373,55 @@ describe('Integration Tests', () => {
 
       expect(servicesTemplate.Resources.Function.Properties!.Environment.Variables.TABLE_ARN).toHaveProperty('Fn::ImportValue');
     });
+
+    test('should convert Fn::GetAtt to cross-stack import when moving the target of an edge, preserving the Fn::GetAtt and attribute', () => {
+      const infraStack: CloudFormationTemplate = {
+        Resources: {
+          Table: {
+            Type: 'AWS::DynamoDB::Table',
+            Properties: {}
+          },
+          Function: {
+            Type: 'AWS::Lambda::Function',
+            Properties: {
+              Environment: {
+                Variables: {
+                  TABLE_ARN: { 'Fn::GetAtt': ['Table', 'Arn'] }
+                }
+              }
+            }
+          }
+        }
+      };
+
+      const servicesStack: CloudFormationTemplate = {
+        Resources: {
+          Queue: {
+            Type: 'AWS::SQS::Queue',
+            Properties: {}
+          }
+        }
+      };
+
+      const graph = parser.parseMultiple([
+        { stackId: 'infra', template: infraStack },
+        { stackId: 'services', template: servicesStack }
+      ]);
+
+      graph.moveNode({ stackId: 'infra', logicalId: 'Table' }, { stackId: 'services', logicalId: 'Table' });
+
+      const templates = generator.generateMultiple(graph);
+      const servicesTemplate = templates.get('services')!;
+      const infraTemplate = templates.get('infra')!;
+
+      expect(servicesTemplate.Outputs).toBeDefined();
+      expect(servicesTemplate.Outputs!.Table).toBeDefined();
+      expect(servicesTemplate.Outputs!.Table.Value).toHaveProperty('Fn::GetAtt');
+      expect(servicesTemplate.Outputs!.Table.Value['Fn::GetAtt']).toEqual(['Table', 'Arn']);
+
+      expect(infraTemplate.Resources.Function.Properties!.Environment.Variables.TABLE_ARN).toHaveProperty('Fn::ImportValue');
+    });
+
 
     test('should handle moving resource with multiple dependencies', () => {
       const template: CloudFormationTemplate = {
