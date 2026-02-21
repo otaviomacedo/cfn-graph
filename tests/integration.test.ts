@@ -383,6 +383,62 @@ describe('Integration Tests', () => {
       expect(Object.keys(stack1Template.Outputs!).length).toBeGreaterThanOrEqual(2);
       expect(stack2Template.Resources.Function).toBeDefined();
     });
+
+    test('should preserve references when moving both resources to different stack', () => {
+      const stack1: CloudFormationTemplate = {
+        Resources: {
+          Bucket: {
+            Type: 'AWS::S3::Bucket',
+            Properties: {}
+          },
+          Function: {
+            Type: 'AWS::Lambda::Function',
+            Properties: {
+              Environment: {
+                Variables: {
+                  BUCKET: { Ref: 'Bucket' }
+                }
+              }
+            },
+            DependsOn: 'Bucket'
+          }
+        }
+      };
+
+      const stack2: CloudFormationTemplate = {
+        Resources: {
+          Queue: {
+            Type: 'AWS::SQS::Queue',
+            Properties: {}
+          }
+        }
+      };
+
+      const graph = parser.parseMultiple([
+        { stackId: 'stack1', template: stack1 },
+        { stackId: 'stack2', template: stack2 }
+      ]);
+
+      // Move both resources to stack2
+      graph.moveNode({ stackId: 'stack1', logicalId: 'Bucket' }, { stackId: 'stack2', logicalId: 'Bucket' });
+      graph.moveNode({ stackId: 'stack1', logicalId: 'Function' }, { stackId: 'stack2', logicalId: 'Function' });
+
+      const templates = generator.generateMultiple(graph);
+      const stack2Template = templates.get('stack2')!;
+
+      // Verify both resources are in stack2
+      expect(stack2Template.Resources.Bucket).toBeDefined();
+      expect(stack2Template.Resources.Function).toBeDefined();
+
+      // Verify Ref remains unchanged (not converted to ImportValue)
+      expect(stack2Template.Resources.Function.Properties!.Environment.Variables.BUCKET).toEqual({ Ref: 'Bucket' });
+
+      // Verify DependsOn remains unchanged
+      expect(stack2Template.Resources.Function.DependsOn).toBe('Bucket');
+
+      // Verify no exports were created (since both moved together)
+      expect(stack2Template.Outputs).toBeUndefined();
+    });
   });
 
   describe('Complex Scenarios', () => {

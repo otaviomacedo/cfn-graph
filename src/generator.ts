@@ -95,7 +95,6 @@ export class CloudFormationGenerator {
     nodeId: string,
     graph: CloudFormationGraph
   ): Record<string, any> {
-    // Get all IMPORT_VALUE edges from this node
     const importEdges = graph.getEdges(nodeId).filter(
       edge => edge.from === nodeId && edge.type === EdgeType.IMPORT_VALUE
     );
@@ -104,22 +103,19 @@ export class CloudFormationGenerator {
       return properties;
     }
 
-    // Build a map of target node IDs to export names
     const importMap = new Map<string, string>();
     for (const edge of importEdges) {
       const targetResourceId = edge.to;
       const targetLogicalId = this.getLocalId(targetResourceId);
       
-      // Find the export name for this resource
-      for (const [exportName, { nodeId }] of graph.getExports().entries()) {
-        if (nodeId === targetResourceId) {
+      for (const [exportName, exportInfo] of graph.getExports().entries()) {
+        if (exportInfo.nodeId === targetResourceId) {
           importMap.set(targetLogicalId, exportName);
           break;
         }
       }
     }
 
-    // Transform Ref intrinsics to Fn::ImportValue
     return this.replaceRefs(properties, importMap);
   }
 

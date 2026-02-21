@@ -119,9 +119,10 @@ export class CloudFormationGraph {
 
     // Track edges that need to be converted to cross-stack references
     const edgesToConvert: Array<{ edge: GraphEdge; targetNode: GraphNode }> = [];
-
-    // Update edges to point to new ID
+    const exportsToRemove = new Set<string>();
     const updatedEdges: GraphEdge[] = [];
+    const edgesToRestore: GraphEdge[] = [];
+    
     for (const edge of this.edges) {
       const updatedEdge = { ...edge };
       let shouldKeepEdge = true;
@@ -130,14 +131,32 @@ export class CloudFormationGraph {
         updatedEdge.from = newQualifiedId;
         
         const toNode = this.nodes.get(edge.to);
-        if (toNode && isMovingAcrossStacks && toNode.stackId !== to.stackId) {
-          if (edge.type === EdgeType.DEPENDS_ON) {
-            shouldKeepEdge = false;
-          } else if (edge.type === EdgeType.REFERENCE || edge.type === EdgeType.GET_ATT) {
-            edgesToConvert.push({ edge, targetNode: toNode });
-            updatedEdge.type = EdgeType.IMPORT_VALUE;
+        if (toNode && isMovingAcrossStacks) {
+          if (toNode.stackId !== to.stackId) {
+            if (edge.type === EdgeType.DEPENDS_ON) {
+              shouldKeepEdge = false;
+            } else if (edge.type === EdgeType.REFERENCE || edge.type === EdgeType.GET_ATT) {
+              edgesToConvert.push({ edge, targetNode: toNode });
+              updatedEdge.type = EdgeType.IMPORT_VALUE;
+              updatedEdge.crossStack = true;
+            }
+          } else {
+            if (edge.type === EdgeType.IMPORT_VALUE) {
+              updatedEdge.type = EdgeType.REFERENCE;
+              updatedEdge.crossStack = false;
+              edgesToRestore.push({ from: newQualifiedId, to: edge.to, type: EdgeType.DEPENDS_ON });
+              for (const [exportName, exportInfo] of this.exports.entries()) {
+                if (exportInfo.nodeId === edge.to) {
+                  exportsToRemove.add(exportName);
+                }
+              }
+            } else {
+              updatedEdge.crossStack = false;
+            }
+            if (edge.type === EdgeType.REFERENCE) {
+              edgesToRestore.push({ from: newQualifiedId, to: edge.to, type: EdgeType.DEPENDS_ON });
+            }
           }
-          updatedEdge.crossStack = true;
         }
       }
       
@@ -145,14 +164,30 @@ export class CloudFormationGraph {
         updatedEdge.to = newQualifiedId;
         
         const fromNode = this.nodes.get(edge.from);
-        if (fromNode && isMovingAcrossStacks && fromNode.stackId !== to.stackId) {
-          if (edge.type === EdgeType.DEPENDS_ON) {
-            shouldKeepEdge = false;
-          } else if (edge.type === EdgeType.REFERENCE || edge.type === EdgeType.GET_ATT) {
-            edgesToConvert.push({ edge, targetNode: movedNode });
-            updatedEdge.type = EdgeType.IMPORT_VALUE;
+        if (fromNode && isMovingAcrossStacks) {
+          if (fromNode.stackId !== to.stackId) {
+            if (edge.type === EdgeType.DEPENDS_ON) {
+              shouldKeepEdge = false;
+            } else if (edge.type === EdgeType.REFERENCE || edge.type === EdgeType.GET_ATT) {
+              updatedEdge.type = EdgeType.IMPORT_VALUE;
+              updatedEdge.crossStack = true;
+            }
+          } else {
+            if (edge.type === EdgeType.IMPORT_VALUE) {
+              updatedEdge.type = EdgeType.REFERENCE;
+              updatedEdge.crossStack = false;
+              for (const [exportName, exportInfo] of this.exports.entries()) {
+                if (exportInfo.nodeId === currentId) {
+                  exportsToRemove.add(exportName);
+                }
+              }
+            } else {
+              updatedEdge.crossStack = false;
+            }
+            if (edge.type === EdgeType.REFERENCE) {
+              edgesToRestore.push({ from: edge.from, to: newQualifiedId, type: EdgeType.DEPENDS_ON });
+            }
           }
-          updatedEdge.crossStack = true;
         }
       }
       
@@ -161,7 +196,6 @@ export class CloudFormationGraph {
       }
     }
 
-    // Update properties in nodes that reference the moved node (within same stack)
     if (!isMovingAcrossStacks && oldLogicalId !== newLogicalId) {
       for (const [nodeId, n] of this.nodes.entries()) {
         if (nodeId !== currentId && n.stackId === from.stackId) {
@@ -170,7 +204,6 @@ export class CloudFormationGraph {
       }
     }
 
-    // Update exports if this node is exported
     const exportsToUpdate: Array<[string, { nodeId: string; outputId: string; value?: any }]> = [];
     for (const [exportName, exportInfo] of this.exports.entries()) {
       if (exportInfo.nodeId === currentId) {
@@ -178,16 +211,24 @@ export class CloudFormationGraph {
       }
     }
 
-    // Apply all changes
     this.nodes.delete(currentId);
     this.nodes.set(newQualifiedId, movedNode);
     this.edges = updatedEdges;
+    
+    for (const exportName of exportsToRemove) {
+      this.exports.delete(exportName);
+    }
     
     for (const [exportName, exportInfo] of exportsToUpdate) {
       this.exports.set(exportName, exportInfo);
     }
 
-    // Convert in-stack references to cross-stack imports
+    for (const edge of edgesToRestore) {
+      if (!this.edges.some(e => e.from === edge.from && e.to === edge.to && e.type === EdgeType.DEPENDS_ON)) {
+        this.edges.push(edge);
+      }
+    }
+
     if (isMovingAcrossStacks && edgesToConvert.length > 0) {
       this.convertReferencesToImports(newQualifiedId, edgesToConvert);
     }
