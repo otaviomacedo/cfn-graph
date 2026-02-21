@@ -230,7 +230,7 @@ export class CloudFormationGraph {
     }
 
     if (isMovingAcrossStacks && edgesToConvert.length > 0) {
-      this.convertReferencesToImports(newQualifiedId, edgesToConvert);
+      this.convertReferencesToImports(edgesToConvert);
     }
   }
 
@@ -269,7 +269,6 @@ export class CloudFormationGraph {
   }
 
   private convertReferencesToImports(
-    movedNodeId: string, 
     edgesToConvert: Array<{ edge: GraphEdge; targetNode: GraphNode }>
   ): void {
     for (const { targetNode } of edgesToConvert) {
