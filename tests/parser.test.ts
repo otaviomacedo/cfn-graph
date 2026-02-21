@@ -129,7 +129,7 @@ describe('CloudFormationParser', () => {
 
       const graph = parser.parse(template, 'stack1');
       const edges = graph.getEdges('stack1.Topic');
-      const getAttEdge = edges.find(e => e.type === EdgeType.REFERENCE);
+      const getAttEdge = edges.find(e => e.type === EdgeType.GET_ATT);
 
       expect(getAttEdge).toBeDefined();
       expect(getAttEdge?.to).toBe('stack1.Queue');

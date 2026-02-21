@@ -271,22 +271,41 @@ export class CloudFormationGraph {
   private convertReferencesToImports(
     edgesToConvert: Array<{ edge: GraphEdge; targetNode: GraphNode }>
   ): void {
-    for (const { targetNode } of edgesToConvert) {
+    // Group edges by target node to handle multiple references to the same resource
+    const edgesByTarget = new Map<string, Array<{ edge: GraphEdge; targetNode: GraphNode }>>();
+    
+    for (const item of edgesToConvert) {
+      const existing = edgesByTarget.get(item.targetNode.id) || [];
+      existing.push(item);
+      edgesByTarget.set(item.targetNode.id, existing);
+    }
+    
+    for (const edges of edgesByTarget.values()) {
+      const targetNode = edges[0].targetNode;
+      const targetLogicalId = this.getLogicalId(targetNode.id);
+      
       // Check if an export already exists for this target
-      let exportName: string | undefined;
-
-      for (const [name, exportInfo] of this.exports.entries()) {
+      let existingExport = false;
+      for (const exportInfo of this.exports.values()) {
         if (exportInfo.nodeId === targetNode.id) {
-          exportName = name;
+          existingExport = true;
           break;
         }
       }
-
-      // If no export exists, create one
-      if (!exportName) {
-        const targetLogicalId = this.getLogicalId(targetNode.id);
-        exportName = `${targetNode.stackId}-${targetLogicalId}`;
-        this.exports.set(exportName, { nodeId: targetNode.id, outputId: targetLogicalId, value: { Ref: targetLogicalId } });
+      
+      if (!existingExport) {
+        // Determine the export value - prefer GetAtt if any edge uses it
+        const getAttEdge = edges.find(e => e.edge.type === EdgeType.GET_ATT && e.edge.attribute);
+        let exportValue: any;
+        
+        if (getAttEdge && getAttEdge.edge.attribute) {
+          exportValue = { 'Fn::GetAtt': [targetLogicalId, getAttEdge.edge.attribute] };
+        } else {
+          exportValue = { Ref: targetLogicalId };
+        }
+        
+        const exportName = `${targetNode.stackId}-${targetLogicalId}`;
+        this.exports.set(exportName, { nodeId: targetNode.id, outputId: targetLogicalId, value: exportValue });
       }
     }
   }
