@@ -367,9 +367,9 @@ describe('Integration Tests', () => {
       const servicesTemplate = templates.get('services')!;
 
       expect(infraTemplate.Outputs).toBeDefined();
-      expect(infraTemplate.Outputs!['Table-Arn']).toBeDefined();
-      expect(infraTemplate.Outputs!['Table-Arn'].Value).toHaveProperty('Fn::GetAtt');
-      expect(infraTemplate.Outputs!['Table-Arn'].Value['Fn::GetAtt']).toEqual(['Table', 'Arn']);
+      expect(infraTemplate.Outputs!.TableArn).toBeDefined();
+      expect(infraTemplate.Outputs!.TableArn.Value).toHaveProperty('Fn::GetAtt');
+      expect(infraTemplate.Outputs!.TableArn.Value['Fn::GetAtt']).toEqual(['Table', 'Arn']);
 
       expect(servicesTemplate.Resources.Function.Properties!.Environment.Variables.TABLE_ARN).toHaveProperty('Fn::ImportValue');
     });
@@ -415,9 +415,9 @@ describe('Integration Tests', () => {
       const infraTemplate = templates.get('infra')!;
 
       expect(servicesTemplate.Outputs).toBeDefined();
-      expect(servicesTemplate.Outputs!['Table-Arn']).toBeDefined();
-      expect(servicesTemplate.Outputs!['Table-Arn'].Value).toHaveProperty('Fn::GetAtt');
-      expect(servicesTemplate.Outputs!['Table-Arn'].Value['Fn::GetAtt']).toEqual(['Table', 'Arn']);
+      expect(servicesTemplate.Outputs!.TableArn).toBeDefined();
+      expect(servicesTemplate.Outputs!.TableArn.Value).toHaveProperty('Fn::GetAtt');
+      expect(servicesTemplate.Outputs!.TableArn.Value['Fn::GetAtt']).toEqual(['Table', 'Arn']);
 
       expect(infraTemplate.Resources.Function.Properties!.Environment.Variables.TABLE_ARN).toHaveProperty('Fn::ImportValue');
     });

@@ -337,7 +337,7 @@ export class CloudFormationGraph {
         
         if (attribute) {
           exportValue = { 'Fn::GetAtt': [targetLogicalId, attribute] };
-          outputId = `${targetLogicalId}-${attribute}`;
+          outputId = `${targetLogicalId}${attribute}`;
         } else {
           exportValue = { Ref: targetLogicalId };
           outputId = targetLogicalId;
