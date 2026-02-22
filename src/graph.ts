@@ -331,19 +331,20 @@ export class CloudFormationGraph {
       }
       
       if (!existingExportName) {
-        // Create export value based on edge type
+        // Create export value and unique output ID based on edge type
         let exportValue: any;
-        let exportSuffix = targetLogicalId;
+        let outputId: string;
         
         if (attribute) {
           exportValue = { 'Fn::GetAtt': [targetLogicalId, attribute] };
-          exportSuffix = `${targetLogicalId}-${attribute}`;
+          outputId = `${targetLogicalId}-${attribute}`;
         } else {
           exportValue = { Ref: targetLogicalId };
+          outputId = targetLogicalId;
         }
         
-        const exportName = `${targetStackId}-${exportSuffix}`;
-        this.exports.set(exportName, { nodeId: targetNode.id, outputId: targetLogicalId, value: exportValue });
+        const exportName = `${targetStackId}-${outputId}`;
+        this.exports.set(exportName, { nodeId: targetNode.id, outputId, value: exportValue });
       }
     }
   }
