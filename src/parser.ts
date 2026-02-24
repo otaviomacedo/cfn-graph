@@ -78,15 +78,16 @@ export class CloudFormationParser {
 
     // Second pass: resolve cross-stack imports
     for (const node of graph.getAllNodes()) {
-      const imports = this.findImports(node.properties);
-      for (const importName of imports) {
+      const imports = this.findImportsWithPath(node.properties);
+      for (const { importName, path } of imports) {
         const exportedResourceId = graph.getExportNode(importName);
         if (exportedResourceId) {
           graph.addEdge({
             from: node.id,
             to: exportedResourceId,
             type: EdgeType.IMPORT_VALUE,
-            crossStack: true
+            crossStack: true,
+            path
           });
         }
       }
@@ -126,27 +127,29 @@ export class CloudFormationParser {
   private extractReferences(resourceId: string, resource: Resource, graph: CloudFormationGraph, stackId: string): void {
     if (!resource.Properties) return;
 
-    const refs = this.findReferences(resource.Properties);
-    for (const ref of refs) {
+    const refs = this.findReferencesWithPath(resource.Properties);
+    for (const { ref, path } of refs) {
       const qualifiedRef = this.getQualifiedId(stackId, ref);
       if (graph.getNode(qualifiedRef)) {
         graph.addEdge({
           from: resourceId,
           to: qualifiedRef,
-          type: EdgeType.REFERENCE
+          type: EdgeType.REFERENCE,
+          path
         });
       }
     }
 
-    const getAtts = this.findGetAtts(resource.Properties);
-    for (const { target, attribute } of getAtts) {
+    const getAtts = this.findGetAttsWithPath(resource.Properties);
+    for (const { target, attribute, path } of getAtts) {
       const qualifiedRef = this.getQualifiedId(stackId, target);
       if (graph.getNode(qualifiedRef)) {
         graph.addEdge({
           from: resourceId,
           to: qualifiedRef,
           type: EdgeType.GET_ATT,
-          attribute
+          attribute,
+          path
         });
       }
     }
@@ -155,15 +158,16 @@ export class CloudFormationParser {
   private extractImports(resourceId: string, resource: Resource, graph: CloudFormationGraph): void {
     if (!resource.Properties) return;
 
-    const imports = this.findImports(resource.Properties);
-    for (const importName of imports) {
+    const imports = this.findImportsWithPath(resource.Properties);
+    for (const { importName, path } of imports) {
       const exportedResourceId = graph.getExportNode(importName);
       if (exportedResourceId) {
         graph.addEdge({
           from: resourceId,
           to: exportedResourceId,
           type: EdgeType.IMPORT_VALUE,
-          crossStack: true
+          crossStack: true,
+          path
         });
       }
     }
@@ -183,6 +187,20 @@ export class CloudFormationParser {
     return Array.from(refs);
   }
 
+  private findReferencesWithPath(obj: any, currentPath: string = '$.Properties', results: Array<{ ref: string; path: string }> = []): Array<{ ref: string; path: string }> {
+    if (typeof obj !== 'object' || obj === null) return results;
+
+    if (obj.Ref && typeof obj.Ref === 'string') {
+      results.push({ ref: obj.Ref, path: currentPath });
+    }
+
+    for (const [key, value] of Object.entries(obj)) {
+      this.findReferencesWithPath(value, `${currentPath}.${key}`, results);
+    }
+
+    return results;
+  }
+
   private findGetAtts(obj: any, getAtts: Array<{ target: string; attribute: string }> = []): Array<{ target: string; attribute: string }> {
     if (typeof obj !== 'object' || obj === null) return getAtts;
 
@@ -198,6 +216,23 @@ export class CloudFormationParser {
     }
 
     return getAtts;
+  }
+
+  private findGetAttsWithPath(obj: any, currentPath: string = '$.Properties', results: Array<{ target: string; attribute: string; path: string }> = []): Array<{ target: string; attribute: string; path: string }> {
+    if (typeof obj !== 'object' || obj === null) return results;
+
+    if (obj['Fn::GetAtt']) {
+      const attr = obj['Fn::GetAtt'];
+      if (Array.isArray(attr) && attr.length >= 2 && typeof attr[0] === 'string' && typeof attr[1] === 'string') {
+        results.push({ target: attr[0], attribute: attr[1], path: currentPath });
+      }
+    }
+
+    for (const [key, value] of Object.entries(obj)) {
+      this.findGetAttsWithPath(value, `${currentPath}.${key}`, results);
+    }
+
+    return results;
   }
 
   private findImports(obj: any, imports: Set<string> = new Set()): string[] {
@@ -219,5 +254,25 @@ export class CloudFormationParser {
     }
 
     return Array.from(imports);
+  }
+
+  private findImportsWithPath(obj: any, currentPath: string = '$.Properties', results: Array<{ importName: string; path: string }> = []): Array<{ importName: string; path: string }> {
+    if (typeof obj !== 'object' || obj === null) return results;
+
+    if (obj['Fn::ImportValue']) {
+      const importValue = obj['Fn::ImportValue'];
+      if (typeof importValue === 'string') {
+        results.push({ importName: importValue, path: currentPath });
+      } else if (typeof importValue === 'object') {
+        const resolved = this.resolveExportName(importValue);
+        results.push({ importName: resolved, path: currentPath });
+      }
+    }
+
+    for (const [key, value] of Object.entries(obj)) {
+      this.findImportsWithPath(value, `${currentPath}.${key}`, results);
+    }
+
+    return results;
   }
 }

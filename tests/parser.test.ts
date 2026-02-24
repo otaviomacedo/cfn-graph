@@ -511,5 +511,203 @@ describe('CloudFormationParser', () => {
       expect(importEdges[0].to).toBe('network.VPC');
     });
   });
+
+
+  describe('JSONPath in Edges', () => {
+    test('should include JSONPath for Ref edges', () => {
+      const template: CloudFormationTemplate = {
+        Resources: {
+          Topic: {
+            Type: 'AWS::SNS::Topic',
+            Properties: {}
+          },
+          Subscription: {
+            Type: 'AWS::SNS::Subscription',
+            Properties: {
+              TopicArn: { Ref: 'Topic' }
+            }
+          }
+        }
+      };
+
+      const graph = parser.parse(template, 'stack1');
+      const edges = graph.getEdges('stack1.Subscription');
+      const refEdge = edges.find(e => e.type === EdgeType.REFERENCE);
+
+      expect(refEdge).toBeDefined();
+      expect(refEdge?.path).toBe('$.Properties.TopicArn');
+    });
+
+    test('should include JSONPath for GetAtt edges', () => {
+      const template: CloudFormationTemplate = {
+        Resources: {
+          Queue: {
+            Type: 'AWS::SQS::Queue',
+            Properties: {}
+          },
+          Topic: {
+            Type: 'AWS::SNS::Topic',
+            Properties: {
+              Subscription: [
+                {
+                  Endpoint: { 'Fn::GetAtt': ['Queue', 'Arn'] },
+                  Protocol: 'sqs'
+                }
+              ]
+            }
+          }
+        }
+      };
+
+      const graph = parser.parse(template, 'stack1');
+      const edges = graph.getEdges('stack1.Topic');
+      const getAttEdge = edges.find(e => e.type === EdgeType.GET_ATT);
+
+      expect(getAttEdge).toBeDefined();
+      expect(getAttEdge?.path).toBe('$.Properties.Subscription.0.Endpoint');
+    });
+
+    test('should include JSONPath for ImportValue edges', () => {
+      const networkStack: CloudFormationTemplate = {
+        Resources: {
+          VPC: {
+            Type: 'AWS::EC2::VPC',
+            Properties: {}
+          }
+        },
+        Outputs: {
+          VPCId: {
+            Value: { Ref: 'VPC' },
+            Export: {
+              Name: 'NetworkStack-VPCId'
+            }
+          }
+        }
+      };
+
+      const appStack: CloudFormationTemplate = {
+        Resources: {
+          SecurityGroup: {
+            Type: 'AWS::EC2::SecurityGroup',
+            Properties: {
+              VpcId: { 'Fn::ImportValue': 'NetworkStack-VPCId' }
+            }
+          }
+        }
+      };
+
+      const graph = parser.parseMultiple([
+        { stackId: 'network', template: networkStack },
+        { stackId: 'app', template: appStack }
+      ]);
+
+      const edges = graph.getEdges('app.SecurityGroup');
+      const importEdge = edges.find(e => e.type === EdgeType.IMPORT_VALUE);
+
+      expect(importEdge).toBeDefined();
+      expect(importEdge?.path).toBe('$.Properties.VpcId');
+    });
+
+    test('should include nested JSONPath for deeply nested references', () => {
+      const template: CloudFormationTemplate = {
+        Resources: {
+          Bucket: {
+            Type: 'AWS::S3::Bucket',
+            Properties: {}
+          },
+          Policy: {
+            Type: 'AWS::S3::BucketPolicy',
+            Properties: {
+              Bucket: { Ref: 'Bucket' },
+              PolicyDocument: {
+                Statement: [
+                  {
+                    Resource: {
+                      'Fn::Sub': [
+                        'arn:aws:s3:::${BucketName}/*',
+                        { BucketName: { Ref: 'Bucket' } }
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      };
+
+      const graph = parser.parse(template, 'stack1');
+      const edges = graph.getEdges('stack1.Policy');
+      const refEdges = edges.filter(e => e.type === EdgeType.REFERENCE);
+
+      expect(refEdges.length).toBeGreaterThan(0);
+      expect(refEdges.some(e => e.path === '$.Properties.Bucket')).toBe(true);
+      expect(refEdges.some(e => e.path?.includes('PolicyDocument'))).toBe(true);
+    });
+
+    test('should track multiple references with different paths', () => {
+      const template: CloudFormationTemplate = {
+        Resources: {
+          Key: {
+            Type: 'AWS::KMS::Key',
+            Properties: {}
+          },
+          Bucket: {
+            Type: 'AWS::S3::Bucket',
+            Properties: {
+              BucketEncryption: {
+                ServerSideEncryptionConfiguration: [
+                  {
+                    ServerSideEncryptionByDefault: {
+                      KMSMasterKeyID: { Ref: 'Key' }
+                    }
+                  }
+                ]
+              },
+              Tags: [
+                {
+                  Key: 'EncryptionKey',
+                  Value: { Ref: 'Key' }
+                }
+              ]
+            }
+          }
+        }
+      };
+
+      const graph = parser.parse(template, 'stack1');
+      const edges = graph.getEdges('stack1.Bucket');
+      const refEdges = edges.filter(e => e.type === EdgeType.REFERENCE && e.to === 'stack1.Key');
+
+      expect(refEdges.length).toBe(2);
+      const paths = refEdges.map(e => e.path);
+      expect(paths).toContain('$.Properties.BucketEncryption.ServerSideEncryptionConfiguration.0.ServerSideEncryptionByDefault.KMSMasterKeyID');
+      expect(paths).toContain('$.Properties.Tags.0.Value');
+    });
+
+    test('should not include path for DependsOn edges', () => {
+      const template: CloudFormationTemplate = {
+        Resources: {
+          Bucket: {
+            Type: 'AWS::S3::Bucket',
+            Properties: {}
+          },
+          Queue: {
+            Type: 'AWS::SQS::Queue',
+            Properties: {},
+            DependsOn: 'Bucket'
+          }
+        }
+      };
+
+      const graph = parser.parse(template, 'stack1');
+      const edges = graph.getEdges('stack1.Queue');
+      const dependsOnEdge = edges.find(e => e.type === EdgeType.DEPENDS_ON);
+
+      expect(dependsOnEdge).toBeDefined();
+      expect(dependsOnEdge?.path).toBeUndefined();
+    });
+  });
 });
+
 
