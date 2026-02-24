@@ -155,8 +155,8 @@ describe('CloudFormationParser', () => {
 
       const graph = parser.parse(template, 'stack1');
       
-      // Check export was registered to VPC resource directly
-      expect(graph.getExportNode('MyVPCId')).toBe('stack1.VPC');
+      // Exports are not tracked in the graph anymore
+      expect(graph.getNode('stack1.VPC')).toBeDefined();
     });
   });
 
@@ -425,10 +425,7 @@ describe('CloudFormationParser', () => {
         { stackId: 'app', template: appStack }
       ]);
 
-      // No export should be registered since there's no resource reference
-      expect(graph.getExportNode('ConfigRegion')).toBeUndefined();
-
-      // No import edge should exist
+      // No import edge should exist since export doesn't reference a resource
       const importEdges = graph.getEdges('app.Bucket').filter(e => e.type === EdgeType.IMPORT_VALUE);
       expect(importEdges).toHaveLength(0);
     });
@@ -461,8 +458,6 @@ describe('CloudFormationParser', () => {
         { stackId: 'config', template: configStack },
         { stackId: 'app', template: appStack }
       ]);
-
-      expect(graph.getExportNode('ConfigMaxSize')).toBeUndefined();
 
       const importEdges = graph.getEdges('app.Queue').filter(e => e.type === EdgeType.IMPORT_VALUE);
       expect(importEdges).toHaveLength(0);
@@ -502,13 +497,11 @@ describe('CloudFormationParser', () => {
         { stackId: 'app', template: appStack }
       ]);
 
-      // Export should be registered to the VPC resource
-      expect(graph.getExportNode('NetworkVPC')).toBe('network.VPC');
-
       // Import edge should exist pointing to VPC
       const importEdges = graph.getEdges('app.SecurityGroup').filter(e => e.type === EdgeType.IMPORT_VALUE);
       expect(importEdges).toHaveLength(1);
       expect(importEdges[0].to).toBe('network.VPC');
+      expect(importEdges[0].exportName).toBe('NetworkVPC');
     });
   });
 

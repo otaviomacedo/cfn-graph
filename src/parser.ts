@@ -4,6 +4,7 @@ import { CloudFormationGraph } from './graph';
 export class CloudFormationParser {
   parse(template: CloudFormationTemplate, stackId: string = 'default'): CloudFormationGraph {
     const graph = new CloudFormationGraph();
+    const exportMap = new Map<string, { nodeId: string; attribute?: string }>();
 
     // Add nodes for each resource
     for (const [resourceId, resource] of Object.entries(template.Resources)) {
@@ -23,7 +24,7 @@ export class CloudFormationParser {
       graph.addNode(node);
     }
 
-    // Register exports (map export name to resource ID)
+    // Build export map from outputs
     if (template.Outputs) {
       for (const [outputId, output] of Object.entries(template.Outputs)) {
         if (output.Export) {
@@ -33,10 +34,10 @@ export class CloudFormationParser {
           
           if (sourceRefs.length > 0) {
             const sourceId = this.getQualifiedId(stackId, sourceRefs[0]);
-            graph.registerExport(exportName, sourceId, outputId, output.Value);
+            exportMap.set(exportName, { nodeId: sourceId });
           } else if (sourceGetAtts.length > 0) {
             const sourceId = this.getQualifiedId(stackId, sourceGetAtts[0].target);
-            graph.registerExport(exportName, sourceId, outputId, output.Value);
+            exportMap.set(exportName, { nodeId: sourceId, attribute: sourceGetAtts[0].attribute });
           }
         }
       }
@@ -47,7 +48,7 @@ export class CloudFormationParser {
       const qualifiedId = this.getQualifiedId(stackId, resourceId);
       this.extractDependencies(qualifiedId, resource, graph, stackId);
       this.extractReferences(qualifiedId, resource, graph, stackId);
-      this.extractImports(qualifiedId, resource, graph);
+      this.extractImports(qualifiedId, resource, graph, exportMap);
     }
 
     return graph;
@@ -55,41 +56,55 @@ export class CloudFormationParser {
 
   parseMultiple(stacks: StackTemplate[]): CloudFormationGraph {
     const graph = new CloudFormationGraph();
+    const exportMap = new Map<string, { nodeId: string; attribute?: string }>();
 
-    // First pass: parse each template independently
+    // First pass: parse each template and build export map
     for (const { stackId, template } of stacks) {
-      const stackGraph = this.parse(template, stackId);
-      
-      // Merge nodes
-      for (const node of stackGraph.getAllNodes()) {
+      // Add nodes
+      for (const [resourceId, resource] of Object.entries(template.Resources)) {
+        const node: GraphNode = {
+          id: this.getQualifiedId(stackId, resourceId),
+          type: resource.Type,
+          properties: resource.Properties || {},
+          metadata: {
+            ...resource.Metadata,
+            ...(resource.CreationPolicy && { CreationPolicy: resource.CreationPolicy }),
+            ...(resource.DeletionPolicy && { DeletionPolicy: resource.DeletionPolicy }),
+            ...(resource.UpdatePolicy && { UpdatePolicy: resource.UpdatePolicy }),
+            ...(resource.UpdateReplacePolicy && { UpdateReplacePolicy: resource.UpdateReplacePolicy })
+          },
+          stackId
+        };
         graph.addNode(node);
       }
 
-      // Merge edges
-      for (const edge of stackGraph.getEdges()) {
-        graph.addEdge(edge);
-      }
-
-      // Merge exports
-      for (const [exportName, {nodeId, outputId, value}] of stackGraph.getExports()) {
-        graph.registerExport(exportName, nodeId, outputId, value);
+      // Build export map
+      if (template.Outputs) {
+        for (const [outputId, output] of Object.entries(template.Outputs)) {
+          if (output.Export) {
+            const exportName = this.resolveExportName(output.Export.Name);
+            const sourceRefs = this.findReferences(output.Value);
+            const sourceGetAtts = this.findGetAtts(output.Value);
+            
+            if (sourceRefs.length > 0) {
+              const sourceId = this.getQualifiedId(stackId, sourceRefs[0]);
+              exportMap.set(exportName, { nodeId: sourceId });
+            } else if (sourceGetAtts.length > 0) {
+              const sourceId = this.getQualifiedId(stackId, sourceGetAtts[0].target);
+              exportMap.set(exportName, { nodeId: sourceId, attribute: sourceGetAtts[0].attribute });
+            }
+          }
+        }
       }
     }
 
-    // Second pass: resolve cross-stack imports
-    for (const node of graph.getAllNodes()) {
-      const imports = this.findImportsWithPath(node.properties);
-      for (const { importName, path } of imports) {
-        const exportedResourceId = graph.getExportNode(importName);
-        if (exportedResourceId) {
-          graph.addEdge({
-            from: node.id,
-            to: exportedResourceId,
-            type: EdgeType.IMPORT_VALUE,
-            crossStack: true,
-            path
-          });
-        }
+    // Second pass: add edges
+    for (const { stackId, template } of stacks) {
+      for (const [resourceId, resource] of Object.entries(template.Resources)) {
+        const qualifiedId = this.getQualifiedId(stackId, resourceId);
+        this.extractDependencies(qualifiedId, resource, graph, stackId);
+        this.extractReferences(qualifiedId, resource, graph, stackId);
+        this.extractImports(qualifiedId, resource, graph, exportMap);
       }
     }
 
@@ -155,19 +170,21 @@ export class CloudFormationParser {
     }
   }
 
-  private extractImports(resourceId: string, resource: Resource, graph: CloudFormationGraph): void {
+  private extractImports(resourceId: string, resource: Resource, graph: CloudFormationGraph, exportMap: Map<string, { nodeId: string; attribute?: string }>): void {
     if (!resource.Properties) return;
 
     const imports = this.findImportsWithPath(resource.Properties);
     for (const { importName, path } of imports) {
-      const exportedResourceId = graph.getExportNode(importName);
-      if (exportedResourceId) {
+      const exportInfo = exportMap.get(importName);
+      if (exportInfo) {
         graph.addEdge({
           from: resourceId,
-          to: exportedResourceId,
+          to: exportInfo.nodeId,
           type: EdgeType.IMPORT_VALUE,
           crossStack: true,
-          path
+          path,
+          exportName: importName,
+          attribute: exportInfo.attribute
         });
       }
     }

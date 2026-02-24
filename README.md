@@ -27,8 +27,8 @@ npm run test:coverage
 - Parse single or multiple CloudFormation templates into a unified graph
 - Automatic detection of cross-stack references (`Fn::ImportValue` and `Export`)
 - Graph manipulation (add/remove nodes and edges)
-- Generate CloudFormation templates from graphs
-- Query dependencies, exports, and cross-stack relationships
+- Generate CloudFormation templates from graphs with automatic export creation
+- Query dependencies and cross-stack relationships
 - Full TypeScript support
 
 ## Usage
@@ -168,18 +168,18 @@ for (const [stackId, template] of templates) {
 ### Query Cross-Stack Relationships
 
 ```typescript
-// Get all exports
-const exports = graph.getExports();
-console.log('Exports:', Array.from(exports.keys()));
-
-// Find which node exports a value
-const exportNode = graph.getExportNode('NetworkStack-VPCId');
-
 // Get all cross-stack edges
 const crossStackEdges = graph.getCrossStackEdges();
 
 // Get nodes by stack
 const networkNodes = graph.getNodesByStack('network');
+
+// Check edge information
+for (const edge of crossStackEdges) {
+  console.log(`Export: ${edge.exportName}`);
+  console.log(`From: ${edge.from} To: ${edge.to}`);
+  console.log(`Attribute: ${edge.attribute}`);
+}
 ```
 
 ## API Reference
@@ -202,9 +202,6 @@ const networkNodes = graph.getNodesByStack('network');
 - `getCrossStackEdges(): GraphEdge[]` - Get all cross-stack edges
 - `getDependencies(nodeId: string): string[]` - Get nodes this node depends on
 - `getDependents(nodeId: string): string[]` - Get nodes that depend on this node
-- `registerExport(exportName: string, nodeId: string): void` - Register an export
-- `getExportNode(exportName: string): string | undefined` - Get the node that exports a value
-- `getExports(): Map<string, string>` - Get all exports
 - `getAllStacks(): string[]` - Get all stack IDs
 - `moveNode(currentId: string, newStackId: string, newLogicalId: string): void` - Move a node to a new location
 - `getStackId(qualifiedId: string): string | undefined` - Get the stack ID from a qualified node ID
@@ -228,12 +225,12 @@ The `moveNode()` method allows you to relocate resources between stacks or renam
 - **Across stacks**: Moves the resource to a different stack
 - **Automatic edge updates**: All edges are updated to point to the new location
 - **Cross-stack flag management**: Automatically updates `crossStack` flags on edges when moving between stacks
-- **Export tracking**: Updates export registrations if the moved node is exported
+- **Export name tracking**: Export names are stored in edges for cross-stack references
 - **Reference conversion**: When moving a resource across stacks, in-stack references (`Ref`) are automatically converted to cross-stack imports (`Fn::ImportValue`) by:
-  1. Creating export nodes in the source stack for referenced resources
-  2. Converting `REFERENCE` edges to `IMPORT_VALUE` edges
-  3. Updating the edge to point to the export node instead of the resource directly
-  4. When generating templates, `Ref` intrinsics become `Fn::ImportValue` intrinsics
+  1. Converting `REFERENCE` edges to `IMPORT_VALUE` edges
+  2. Generating export names and storing them in the edge
+  3. When generating templates, the generator creates the necessary exports in the source stack
+  4. `Ref` intrinsics become `Fn::ImportValue` intrinsics in the consuming stack
 
 Example use cases:
 - Refactoring resources between stacks
@@ -241,7 +238,7 @@ Example use cases:
 - Consolidating or splitting stacks
 - Reorganizing infrastructure as code
 
-**Important**: When a resource with `Ref` dependencies is moved to another stack, the parser automatically creates the necessary exports and converts references to imports, ensuring the generated CloudFormation templates remain valid.
+**Important**: When a resource with `Ref` dependencies is moved to another stack, the graph automatically converts references to imports and stores export names in the edges. The generator uses this information to create the necessary exports when generating templates.
 
 ## License
 

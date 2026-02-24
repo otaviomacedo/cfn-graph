@@ -222,63 +222,6 @@ describe('CloudFormationGraph', () => {
     });
   });
 
-  describe('Export Operations', () => {
-    test('should register an export', () => {
-      const node: GraphNode = {
-        id: 'stack1.VPC',
-        type: 'AWS::EC2::VPC',
-        properties: {},
-        stackId: 'stack1'
-      };
-
-      graph.addNode(node);
-      graph.registerExport('MyVPC', 'stack1.VPC', 'VPCId');
-
-      expect(graph.getExportNode('MyVPC')).toBe('stack1.VPC');
-      expect(graph.getExports().get('MyVPC')?.outputId).toBe('VPCId');
-    });
-
-    test('should get all exports', () => {
-      const node1: GraphNode = {
-        id: 'stack1.VPC',
-        type: 'AWS::EC2::VPC',
-        properties: {},
-        stackId: 'stack1'
-      };
-      const node2: GraphNode = {
-        id: 'stack1.Subnet',
-        type: 'AWS::EC2::Subnet',
-        properties: {},
-        stackId: 'stack1'
-      };
-
-      graph.addNode(node1);
-      graph.addNode(node2);
-      graph.registerExport('MyVPC', 'stack1.VPC', 'VPCId');
-      graph.registerExport('MySubnet', 'stack1.Subnet', 'SubnetId');
-
-      const exports = graph.getExports();
-      expect(exports.size).toBe(2);
-      expect(exports.get('MyVPC')?.nodeId).toBe('stack1.VPC');
-      expect(exports.get('MySubnet')?.nodeId).toBe('stack1.Subnet');
-    });
-
-    test('should remove export when node is removed', () => {
-      const node: GraphNode = {
-        id: 'stack1.VPC',
-        type: 'AWS::EC2::VPC',
-        properties: {},
-        stackId: 'stack1'
-      };
-
-      graph.addNode(node);
-      graph.registerExport('MyVPC', 'stack1.VPC', 'VPCId');
-      graph.removeNode('stack1.VPC');
-
-      expect(graph.getExportNode('MyVPC')).toBeUndefined();
-    });
-  });
-
   describe('Node Movement', () => {
     beforeEach(() => {
       const node1: GraphNode = {
@@ -407,25 +350,16 @@ describe('CloudFormationGraph', () => {
       // Move subscription to different stack
       graph.moveNode({ stackId: 'stack1', logicalId: 'Subscription' }, { stackId: 'stack2', logicalId: 'Subscription' });
 
-      // Check that export was registered
-      const exports = graph.getExports();
-      const exportNames = Array.from(exports.keys());
-      expect(exportNames.some(name => name.includes('Topic'))).toBe(true);
-
       // Check that edge was converted to IMPORT_VALUE
       const edges = graph.getEdges('stack2.Subscription');
       const importEdge = edges.find(e => e.type === EdgeType.IMPORT_VALUE);
       expect(importEdge).toBeDefined();
       expect(importEdge?.crossStack).toBe(true);
       expect(importEdge?.to).toBe('stack1.Topic');
+      expect(importEdge?.exportName).toBeDefined();
     });
 
-    test('should update export registrations when moving exported node', () => {
-      graph.registerExport('MyBucket', 'stack1.Bucket');
-      graph.moveNode({ stackId: 'stack1', logicalId: 'Bucket' }, { stackId: 'stack2', logicalId: 'Bucket' });
 
-      expect(graph.getExportNode('MyBucket')).toBe('stack2.Bucket');
-    });
   });
 
   describe('Utility Methods', () => {
@@ -577,23 +511,6 @@ describe('CloudFormationGraph', () => {
       expect(reversed.getAllNodes()).toHaveLength(2);
       expect(reversed.getNode('stack1::Bucket')).toEqual(bucket);
       expect(reversed.getNode('stack1::Queue')).toEqual(queue);
-    });
-
-    test('should preserve exports', () => {
-      const vpcNode: GraphNode = {
-        id: 'stack1.VPC',
-        type: 'AWS::EC2::VPC',
-        properties: {},
-        stackId: 'stack1'
-      };
-
-      graph.addNode(vpcNode);
-      graph.registerExport('MyVPC', 'stack1.VPC', 'VPCId');
-
-      const reversed = graph.opposite();
-
-      expect(reversed.getExportNode('MyVPC')).toBe('stack1.VPC');
-      expect(reversed.getExports().size).toBe(1);
     });
 
     test('should reverse dependencies and dependents', () => {

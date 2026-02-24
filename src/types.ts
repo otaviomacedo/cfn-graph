@@ -44,6 +44,7 @@ export interface GraphEdge {
   crossStack?: boolean;
   attribute?: string;
   path?: string;
+  exportName?: string;
 }
 
 export interface StackTemplate {

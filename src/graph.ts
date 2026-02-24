@@ -3,7 +3,6 @@ import { GraphNode, GraphEdge, EdgeType, NodeLocation } from './types';
 export class CloudFormationGraph {
   private nodes: Map<string, GraphNode> = new Map();
   private edges: GraphEdge[] = [];
-  private exports: Map<string, { nodeId: string; outputId: string; value?: any }> = new Map(); // exportName -> { nodeId, outputId, value }
 
   addNode(node: GraphNode): void {
     this.nodes.set(node.id, node);
@@ -12,13 +11,6 @@ export class CloudFormationGraph {
   removeNode(id: string): void {
     this.nodes.delete(id);
     this.edges = this.edges.filter(edge => edge.from !== id && edge.to !== id);
-    
-    // Remove from exports if it's an export node
-    for (const [exportName, exportInfo] of this.exports.entries()) {
-      if (exportInfo.nodeId === id) {
-        this.exports.delete(exportName);
-      }
-    }
   }
 
   getNode(id: string): GraphNode | undefined {
@@ -65,17 +57,7 @@ export class CloudFormationGraph {
       .map(edge => edge.from);
   }
 
-  registerExport(exportName: string, nodeId: string, outputId?: string, value?: any): void {
-    this.exports.set(exportName, { nodeId, outputId: outputId || this.getLogicalId(nodeId), value });
-  }
 
-  getExportNode(exportName: string): string | undefined {
-    return this.exports.get(exportName)?.nodeId;
-  }
-
-  getExports(): Map<string, { nodeId: string; outputId: string; value?: any }> {
-    return new Map(this.exports);
-  }
 
   getAllStacks(): string[] {
     const stacks = new Set<string>();
@@ -119,7 +101,6 @@ export class CloudFormationGraph {
 
     // Track edges that need to be converted to cross-stack references
     const edgesToConvert: Array<{ edge: GraphEdge; targetNode: GraphNode; targetStackId: string }> = [];
-    const exportsToRemove = new Set<string>();
     const updatedEdges: GraphEdge[] = [];
     const edgesToRestore: GraphEdge[] = [];
     
@@ -140,8 +121,7 @@ export class CloudFormationGraph {
               edgesToConvert.push({ edge: updatedEdge, targetNode: toNode, targetStackId: toNode.stackId! });
               updatedEdge.type = EdgeType.IMPORT_VALUE;
               updatedEdge.crossStack = true;
-              // Preserve attribute for GetAtt edges
-              if (edge.type === EdgeType.GET_ATT && edge.attribute) {
+              if (edge.attribute) {
                 updatedEdge.attribute = edge.attribute;
               }
             }
@@ -150,13 +130,8 @@ export class CloudFormationGraph {
             if (edge.type === EdgeType.IMPORT_VALUE) {
               updatedEdge.type = edge.attribute ? EdgeType.GET_ATT : EdgeType.REFERENCE;
               updatedEdge.crossStack = false;
+              updatedEdge.exportName = undefined;
               edgesToRestore.push({ from: newQualifiedId, to: edge.to, type: EdgeType.DEPENDS_ON });
-              // Mark exports for removal if no other nodes use them
-              for (const [exportName, exportInfo] of this.exports.entries()) {
-                if (exportInfo.nodeId === edge.to) {
-                  exportsToRemove.add(exportName);
-                }
-              }
             } else {
               updatedEdge.crossStack = false;
             }
@@ -182,8 +157,7 @@ export class CloudFormationGraph {
               edgesToConvert.push({ edge: targetEdge, targetNode: movedNode, targetStackId: to.stackId });
               updatedEdge.type = EdgeType.IMPORT_VALUE;
               updatedEdge.crossStack = true;
-              // Preserve attribute for GetAtt edges
-              if (edge.type === EdgeType.GET_ATT && edge.attribute) {
+              if (edge.attribute) {
                 updatedEdge.attribute = edge.attribute;
               }
             }
@@ -192,12 +166,7 @@ export class CloudFormationGraph {
             if (edge.type === EdgeType.IMPORT_VALUE) {
               updatedEdge.type = edge.attribute ? EdgeType.GET_ATT : EdgeType.REFERENCE;
               updatedEdge.crossStack = false;
-              // Mark exports for removal
-              for (const [exportName, exportInfo] of this.exports.entries()) {
-                if (exportInfo.nodeId === currentId) {
-                  exportsToRemove.add(exportName);
-                }
-              }
+              updatedEdge.exportName = undefined;
             } else {
               updatedEdge.crossStack = false;
             }
@@ -221,33 +190,9 @@ export class CloudFormationGraph {
       }
     }
 
-    const exportsToUpdate: Array<[string, { nodeId: string; outputId: string; value?: any }]> = [];
-    for (const [exportName, exportInfo] of this.exports.entries()) {
-      if (exportInfo.nodeId === currentId) {
-        exportsToUpdate.push([exportName, { nodeId: newQualifiedId, outputId: exportInfo.outputId, value: exportInfo.value }]);
-      }
-    }
-
     this.nodes.delete(currentId);
     this.nodes.set(newQualifiedId, movedNode);
     this.edges = updatedEdges;
-    
-    // Only remove exports if no other cross-stack edges reference them
-    for (const exportName of exportsToRemove) {
-      const exportInfo = this.exports.get(exportName);
-      if (exportInfo) {
-        const stillUsed = this.edges.some(
-          e => e.type === EdgeType.IMPORT_VALUE && e.to === exportInfo.nodeId && e.crossStack
-        );
-        if (!stillUsed) {
-          this.exports.delete(exportName);
-        }
-      }
-    }
-    
-    for (const [exportName, exportInfo] of exportsToUpdate) {
-      this.exports.set(exportName, exportInfo);
-    }
 
     for (const edge of edgesToRestore) {
       if (!this.edges.some(e => e.from === edge.from && e.to === edge.to && e.type === EdgeType.DEPENDS_ON)) {
@@ -297,54 +242,33 @@ export class CloudFormationGraph {
   private convertReferencesToImports(
     edgesToConvert: Array<{ edge: GraphEdge; targetNode: GraphNode; targetStackId: string }>
   ): void {
-    // Group edges by target node and attribute to handle multiple references
-    const edgesByTargetAndAttr = new Map<string, Array<{ edge: GraphEdge; targetNode: GraphNode; targetStackId: string }>>();
-    
-    for (const item of edgesToConvert) {
-      const key = item.edge.attribute 
-        ? `${item.targetNode.id}::${item.edge.attribute}`
-        : item.targetNode.id;
-      const existing = edgesByTargetAndAttr.get(key) || [];
-      existing.push(item);
-      edgesByTargetAndAttr.set(key, existing);
-    }
-    
-    for (const edges of edgesByTargetAndAttr.values()) {
-      const targetNode = edges[0].targetNode;
-      const targetStackId = edges[0].targetStackId;
+    for (const { edge, targetNode, targetStackId } of edgesToConvert) {
       const targetLogicalId = this.getLogicalId(targetNode.id);
-      const attribute = edges[0].edge.attribute;
+      const attribute = edge.attribute;
       
-      // Check if an export already exists for this target and attribute combination
+      // Check if an export name already exists on any edge pointing to this target
       let existingExportName: string | undefined;
-      for (const [exportName, exportInfo] of this.exports.entries()) {
-        if (exportInfo.nodeId === targetNode.id) {
-          // Check if the export value matches what we need
-          if (attribute && exportInfo.value?.['Fn::GetAtt']?.[1] === attribute) {
-            existingExportName = exportName;
+      for (const e of this.edges) {
+        if (e.to === targetNode.id && e.exportName && e.type === EdgeType.IMPORT_VALUE) {
+          if (attribute && e.attribute === attribute) {
+            existingExportName = e.exportName;
             break;
-          } else if (!attribute && exportInfo.value?.Ref) {
-            existingExportName = exportName;
+          } else if (!attribute && !e.attribute) {
+            existingExportName = e.exportName;
             break;
           }
         }
       }
       
       if (!existingExportName) {
-        // Create export value and unique output ID based on edge type
-        let exportValue: any;
-        let outputId: string;
-        
-        if (attribute) {
-          exportValue = { 'Fn::GetAtt': [targetLogicalId, attribute] };
-          outputId = `${targetLogicalId}${attribute}`;
-        } else {
-          exportValue = { Ref: targetLogicalId };
-          outputId = targetLogicalId;
-        }
-        
-        const exportName = `${targetStackId}-${outputId}`;
-        this.exports.set(exportName, { nodeId: targetNode.id, outputId, value: exportValue });
+        const outputId = attribute ? `${targetLogicalId}${attribute}` : targetLogicalId;
+        existingExportName = `${targetStackId}-${outputId}`;
+      }
+      
+      // Update the edge with the export name
+      const edgeToUpdate = this.edges.find(e => e.from === edge.from && e.to === edge.to && e.type === EdgeType.IMPORT_VALUE);
+      if (edgeToUpdate) {
+        edgeToUpdate.exportName = existingExportName;
       }
     }
   }
@@ -407,10 +331,6 @@ export class CloudFormationGraph {
 
     for (const edge of this.edges) {
       reversed.edges.push({ ...edge, from: edge.to, to: edge.from });
-    }
-    
-    for (const [exportName, exportInfo] of this.exports.entries()) {
-      reversed.exports.set(exportName, exportInfo);
     }
     
     return reversed;

@@ -69,36 +69,35 @@ export class CloudFormationGenerator {
       template.Resources[localId] = resource;
     }
 
-    // Generate outputs from exports
-    const exports = graph.getExports();
-    for (const [exportName, exportInfo] of exports.entries()) {
-      const resourceNode = graph.getNode(exportInfo.nodeId);
-      if (resourceNode && resourceNode.stackId === stackId) {
-        template.Outputs = template.Outputs || {};
-        const localId = this.getLocalId(exportInfo.nodeId);
-        
-        // Use the stored export value, or default to Ref
-        let outputValue = exportInfo.value;
-        if (!outputValue) {
-          outputValue = { Ref: localId };
-        } else if (outputValue['Fn::GetAtt']) {
-          // Ensure GetAtt uses local ID
-          const attr = outputValue['Fn::GetAtt'];
-          if (Array.isArray(attr)) {
-            outputValue = { 'Fn::GetAtt': [localId, ...attr.slice(1)] };
+    // Generate outputs for cross-stack edges pointing to resources in this stack
+    if (stackId) {
+      const exportsNeeded = new Map<string, { nodeId: string; attribute?: string }>();
+      
+      for (const edge of graph.getCrossStackEdges()) {
+        if (edge.type === EdgeType.IMPORT_VALUE) {
+          const targetNode = graph.getNode(edge.to);
+          if (targetNode && targetNode.stackId === stackId) {
+            const exportName = edge.exportName || this.generateExportName(stackId, edge.to, edge.attribute);
+            if (!exportsNeeded.has(exportName)) {
+              exportsNeeded.set(exportName, { nodeId: edge.to, attribute: edge.attribute });
+            }
           }
-        } else if (outputValue.Ref) {
-          // Ensure Ref uses local ID
-          outputValue = { Ref: localId };
         }
+      }
+
+      for (const [exportName, { nodeId, attribute }] of exportsNeeded) {
+        template.Outputs = template.Outputs || {};
+        const localId = this.getLocalId(nodeId);
+        const outputId = attribute ? `${localId}${attribute}` : localId;
         
-        const output: Output = {
+        const outputValue = attribute 
+          ? { 'Fn::GetAtt': [localId, attribute] }
+          : { Ref: localId };
+        
+        template.Outputs[outputId] = {
           Value: outputValue,
-          Export: {
-            Name: exportName
-          }
+          Export: { Name: exportName }
         };
-        template.Outputs[exportInfo.outputId] = output;
       }
     }
 
@@ -118,25 +117,19 @@ export class CloudFormationGenerator {
       return properties;
     }
 
-    const importMap = new Map<string, { exportName: string; attribute?: string }>();
+    const importMap = new Map<string, string>();
     for (const edge of importEdges) {
-      const targetResourceId = edge.to;
-      const targetLogicalId = this.getLocalId(targetResourceId);
+      const exportName = edge.exportName || this.generateExportName(
+        graph.getNode(edge.to)?.stackId || '',
+        edge.to,
+        edge.attribute
+      );
       
-      for (const [exportName, exportInfo] of graph.getExports().entries()) {
-        if (exportInfo.nodeId === targetResourceId) {
-          // Match export by attribute if edge has one
-          if (edge.attribute) {
-            if (exportInfo.value?.['Fn::GetAtt']?.[1] === edge.attribute) {
-              importMap.set(targetLogicalId, { exportName, attribute: edge.attribute });
-              break;
-            }
-          } else if (exportInfo.value?.Ref) {
-            importMap.set(targetLogicalId, { exportName });
-            break;
-          }
-        }
-      }
+      const key = edge.attribute 
+        ? `${this.getLocalId(edge.to)}::${edge.attribute}`
+        : this.getLocalId(edge.to);
+      
+      importMap.set(key, exportName);
     }
 
     return this.replaceRefs(properties, importMap);
@@ -144,7 +137,7 @@ export class CloudFormationGenerator {
 
   private replaceRefs(
     obj: any,
-    importMap: Map<string, { exportName: string; attribute?: string }>
+    importMap: Map<string, string>
   ): any {
     if (obj === null || obj === undefined) {
       return obj;
@@ -159,9 +152,11 @@ export class CloudFormationGenerator {
     }
 
     // Check if this is a Ref that needs to be converted
-    if (obj.Ref && typeof obj.Ref === 'string' && importMap.has(obj.Ref)) {
-      const importInfo = importMap.get(obj.Ref)!;
-      return { 'Fn::ImportValue': importInfo.exportName };
+    if (obj.Ref && typeof obj.Ref === 'string') {
+      const exportName = importMap.get(obj.Ref);
+      if (exportName) {
+        return { 'Fn::ImportValue': exportName };
+      }
     }
 
     // Check if this is a Fn::GetAtt that needs to be converted
@@ -171,11 +166,11 @@ export class CloudFormationGenerator {
         const target = attr[0];
         const attribute = attr[1];
         
-        if (typeof target === 'string' && importMap.has(target)) {
-          const importInfo = importMap.get(target)!;
-          // Only convert if the attribute matches
-          if (importInfo.attribute === attribute) {
-            return { 'Fn::ImportValue': importInfo.exportName };
+        if (typeof target === 'string') {
+          const key = `${target}::${attribute}`;
+          const exportName = importMap.get(key);
+          if (exportName) {
+            return { 'Fn::ImportValue': exportName };
           }
         }
       }
@@ -198,6 +193,12 @@ export class CloudFormationGenerator {
     }
 
     return templates;
+  }
+
+  private generateExportName(stackId: string, nodeId: string, attribute?: string): string {
+    const localId = this.getLocalId(nodeId);
+    const outputId = attribute ? `${localId}${attribute}` : localId;
+    return `${stackId}-${outputId}`;
   }
 
   private getLocalId(qualifiedId: string): string {

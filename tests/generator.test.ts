@@ -109,15 +109,30 @@ describe('CloudFormationGenerator', () => {
         properties: {},
         stackId: 'stack1'
       };
+      const sg: GraphNode = {
+        id: 'stack2.SG',
+        type: 'AWS::EC2::SecurityGroup',
+        properties: {},
+        stackId: 'stack2'
+      };
 
       graph.addNode(vpc);
-      graph.registerExport('MyVPCId', 'stack1.VPC', 'VPCOutput');
+      graph.addNode(sg);
+      
+      // Add cross-stack edge with export name
+      graph.addEdge({
+        from: 'stack2.SG',
+        to: 'stack1.VPC',
+        type: EdgeType.IMPORT_VALUE,
+        crossStack: true,
+        exportName: 'MyVPCId'
+      });
 
       const template = generator.generate(graph, 'stack1');
 
       expect(template.Outputs).toBeDefined();
-      expect(template.Outputs!.VPCOutput).toBeDefined();
-      expect(template.Outputs!.VPCOutput.Export?.Name).toBe('MyVPCId');
+      expect(template.Outputs!.VPC).toBeDefined();
+      expect(template.Outputs!.VPC.Export?.Name).toBe('MyVPCId');
     });
 
     test('should include metadata in generated resources', () => {
@@ -288,7 +303,7 @@ describe('CloudFormationGenerator', () => {
           SecurityGroup: {
             Type: 'AWS::EC2::SecurityGroup',
             Properties: {
-              VpcId: { Ref: 'VPC' }  // This will be in-stack initially
+              VpcId: { 'Fn::ImportValue': 'NetworkStack-VPCId' }
             }
           }
         }
@@ -299,26 +314,10 @@ describe('CloudFormationGenerator', () => {
         { stackId: 'app', template: appStack }
       ]);
 
-      // Move SecurityGroup's reference to create cross-stack scenario
-      // In reality, this would happen through moveNode, but we'll simulate the graph state
-      const sgNode = graph.getNode('app.SecurityGroup');
-      if (sgNode) {
-        // Add import edge
-        const exportNodeId = graph.getExportNode('NetworkStack-VPCId');
-        if (exportNodeId) {
-          graph.addEdge({
-            from: 'app.SecurityGroup',
-            to: exportNodeId,
-            type: EdgeType.IMPORT_VALUE,
-            crossStack: true
-          });
-        }
-      }
-
       const templates = generator.generateMultiple(graph);
       const appTemplate = templates.get('app')!;
 
-      // The generator should convert Ref to Fn::ImportValue
+      // The generator should keep Fn::ImportValue
       expect(appTemplate.Resources.SecurityGroup.Properties).toBeDefined();
       expect(appTemplate.Resources.SecurityGroup.Properties!.VpcId).toHaveProperty('Fn::ImportValue');
     });
@@ -419,32 +418,6 @@ describe('CloudFormationGenerator', () => {
 
       expect(generatedTemplate.Resources.ASG.DeletionPolicy).toBe('Retain');
       expect(generatedTemplate.Resources.ASG.UpdateReplacePolicy).toBe('Snapshot');
-    });
-
-    test('should preserve exports through round-trip', () => {
-      const originalTemplate: CloudFormationTemplate = {
-        Resources: {
-          VPC: {
-            Type: 'AWS::EC2::VPC',
-            Properties: {}
-          }
-        },
-        Outputs: {
-          VPCId: {
-            Value: { Ref: 'VPC' },
-            Export: {
-              Name: 'MyVPCId'
-            }
-          }
-        }
-      };
-
-      const graph = parser.parse(originalTemplate, 'stack1');
-      const generatedTemplate = generator.generate(graph, 'stack1');
-
-      expect(generatedTemplate.Outputs).toBeDefined();
-      expect(generatedTemplate.Outputs!.VPCId).toBeDefined();
-      expect(generatedTemplate.Outputs!.VPCId.Export?.Name).toBe('MyVPCId');
     });
   });
 
