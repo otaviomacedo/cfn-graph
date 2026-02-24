@@ -1,5 +1,6 @@
 import { CloudFormationParser } from '../src/parser';
 import { CloudFormationTemplate, EdgeType } from '../src/types';
+import { isCrossStackEdge } from '../src/utils';
 
 describe('CloudFormationParser', () => {
   let parser: CloudFormationParser;
@@ -232,7 +233,7 @@ describe('CloudFormationParser', () => {
         e => e.type === EdgeType.IMPORT_VALUE && e.from === 'app.SecurityGroup'
       );
       expect(importEdge).toBeDefined();
-      expect(importEdge?.crossStack).toBe(true);
+      expect(importEdge && isCrossStackEdge(importEdge)).toBe(true);
     });
 
     test('should handle multiple imports from same export', () => {

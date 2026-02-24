@@ -1,4 +1,5 @@
 import { GraphNode, GraphEdge, EdgeType, NodeLocation } from './types';
+import { isCrossStackEdge } from './utils';
 
 export class CloudFormationGraph {
   private nodes: Map<string, GraphNode> = new Map();
@@ -42,7 +43,7 @@ export class CloudFormationGraph {
   }
 
   getCrossStackEdges(): GraphEdge[] {
-    return this.edges.filter(edge => edge.crossStack);
+    return this.edges.filter(edge => isCrossStackEdge(edge));
   }
 
   getDependencies(nodeId: string): string[] {
@@ -120,7 +121,6 @@ export class CloudFormationGraph {
             } else if (edge.type === EdgeType.REFERENCE || edge.type === EdgeType.GET_ATT) {
               edgesToConvert.push({ edge: updatedEdge, targetNode: toNode, targetStackId: toNode.stackId! });
               updatedEdge.type = EdgeType.IMPORT_VALUE;
-              updatedEdge.crossStack = true;
               if (edge.attribute) {
                 updatedEdge.attribute = edge.attribute;
               }
@@ -129,11 +129,8 @@ export class CloudFormationGraph {
             // Moving to same stack as target - convert back to in-stack reference
             if (edge.type === EdgeType.IMPORT_VALUE) {
               updatedEdge.type = edge.attribute ? EdgeType.GET_ATT : EdgeType.REFERENCE;
-              updatedEdge.crossStack = false;
               updatedEdge.exportName = undefined;
               edgesToRestore.push({ from: newQualifiedId, to: edge.to, type: EdgeType.DEPENDS_ON });
-            } else {
-              updatedEdge.crossStack = false;
             }
             if (edge.type === EdgeType.REFERENCE || edge.type === EdgeType.GET_ATT) {
               edgesToRestore.push({ from: newQualifiedId, to: edge.to, type: EdgeType.DEPENDS_ON });
@@ -156,7 +153,6 @@ export class CloudFormationGraph {
               const targetEdge = { ...edge, to: newQualifiedId };
               edgesToConvert.push({ edge: targetEdge, targetNode: movedNode, targetStackId: to.stackId });
               updatedEdge.type = EdgeType.IMPORT_VALUE;
-              updatedEdge.crossStack = true;
               if (edge.attribute) {
                 updatedEdge.attribute = edge.attribute;
               }
@@ -165,10 +161,7 @@ export class CloudFormationGraph {
             // Target moving to same stack - convert back to in-stack reference  
             if (edge.type === EdgeType.IMPORT_VALUE) {
               updatedEdge.type = edge.attribute ? EdgeType.GET_ATT : EdgeType.REFERENCE;
-              updatedEdge.crossStack = false;
               updatedEdge.exportName = undefined;
-            } else {
-              updatedEdge.crossStack = false;
             }
             if (edge.type === EdgeType.REFERENCE || edge.type === EdgeType.GET_ATT) {
               edgesToRestore.push({ from: edge.from, to: newQualifiedId, type: EdgeType.DEPENDS_ON });

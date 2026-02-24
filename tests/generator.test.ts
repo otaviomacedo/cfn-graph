@@ -124,7 +124,6 @@ describe('CloudFormationGenerator', () => {
         from: 'stack2.SG',
         to: 'stack1.VPC',
         type: EdgeType.IMPORT_VALUE,
-        crossStack: true,
         exportName: 'MyVPCId'
       });
 
@@ -216,8 +215,7 @@ describe('CloudFormationGenerator', () => {
       graph.addEdge({
         from: 'stack2.Queue',
         to: 'stack1.Bucket',
-        type: EdgeType.DEPENDS_ON,
-        crossStack: true
+        type: EdgeType.DEPENDS_ON
       });
 
       const template = generator.generate(graph, 'stack2');

@@ -181,7 +181,6 @@ export class CloudFormationParser {
           from: resourceId,
           to: exportInfo.nodeId,
           type: EdgeType.IMPORT_VALUE,
-          crossStack: true,
           path,
           exportName: importName,
           attribute: exportInfo.attribute

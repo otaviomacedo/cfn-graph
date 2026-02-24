@@ -1,5 +1,6 @@
 import { CloudFormationGraph } from '../src/graph';
 import { GraphNode, EdgeType } from '../src/types';
+import { isCrossStackEdge } from '../src/utils';
 
 describe('CloudFormationGraph', () => {
   let graph: CloudFormationGraph;
@@ -106,13 +107,13 @@ describe('CloudFormationGraph', () => {
   describe('Edge Operations', () => {
     beforeEach(() => {
       const node1: GraphNode = {
-        id: 'stack1::Bucket',
+        id: 'stack1.Bucket',
         type: 'AWS::S3::Bucket',
         properties: {},
         stackId: 'stack1'
       };
       const node2: GraphNode = {
-        id: 'stack1::Queue',
+        id: 'stack1.Queue',
         type: 'AWS::SQS::Queue',
         properties: {},
         stackId: 'stack1'
@@ -124,16 +125,16 @@ describe('CloudFormationGraph', () => {
 
     test('should add an edge', () => {
       graph.addEdge({
-        from: 'stack1::Queue',
-        to: 'stack1::Bucket',
+        from: 'stack1.Queue',
+        to: 'stack1.Bucket',
         type: EdgeType.DEPENDS_ON
       });
 
-      const edges = graph.getEdges('stack1::Queue');
+      const edges = graph.getEdges('stack1.Queue');
       expect(edges).toHaveLength(1);
       expect(edges[0]).toMatchObject({
-        from: 'stack1::Queue',
-        to: 'stack1::Bucket',
+        from: 'stack1.Queue',
+        to: 'stack1.Bucket',
         type: EdgeType.DEPENDS_ON
       });
     });
@@ -141,8 +142,8 @@ describe('CloudFormationGraph', () => {
     test('should throw error when adding edge with non-existent nodes', () => {
       expect(() => {
         graph.addEdge({
-          from: 'stack1::NonExistent',
-          to: 'stack1::Bucket',
+          from: 'stack1.NonExistent',
+          to: 'stack1.Bucket',
           type: EdgeType.DEPENDS_ON
         });
       }).toThrow();
@@ -150,20 +151,20 @@ describe('CloudFormationGraph', () => {
 
     test('should remove an edge', () => {
       graph.addEdge({
-        from: 'stack1::Queue',
-        to: 'stack1::Bucket',
+        from: 'stack1.Queue',
+        to: 'stack1.Bucket',
         type: EdgeType.DEPENDS_ON
       });
 
-      graph.removeEdge('stack1::Queue', 'stack1::Bucket');
-      const edges = graph.getEdges('stack1::Queue');
+      graph.removeEdge('stack1.Queue', 'stack1.Bucket');
+      const edges = graph.getEdges('stack1.Queue');
       expect(edges).toHaveLength(0);
     });
 
     test('should get all edges', () => {
       graph.addEdge({
-        from: 'stack1::Queue',
-        to: 'stack1::Bucket',
+        from: 'stack1.Queue',
+        to: 'stack1.Bucket',
         type: EdgeType.DEPENDS_ON
       });
 
@@ -173,29 +174,29 @@ describe('CloudFormationGraph', () => {
 
     test('should get dependencies', () => {
       graph.addEdge({
-        from: 'stack1::Queue',
-        to: 'stack1::Bucket',
+        from: 'stack1.Queue',
+        to: 'stack1.Bucket',
         type: EdgeType.DEPENDS_ON
       });
 
-      const deps = graph.getDependencies('stack1::Queue');
-      expect(deps).toEqual(['stack1::Bucket']);
+      const deps = graph.getDependencies('stack1.Queue');
+      expect(deps).toEqual(['stack1.Bucket']);
     });
 
     test('should get dependents', () => {
       graph.addEdge({
-        from: 'stack1::Queue',
-        to: 'stack1::Bucket',
+        from: 'stack1.Queue',
+        to: 'stack1.Bucket',
         type: EdgeType.DEPENDS_ON
       });
 
-      const dependents = graph.getDependents('stack1::Bucket');
-      expect(dependents).toEqual(['stack1::Queue']);
+      const dependents = graph.getDependents('stack1.Bucket');
+      expect(dependents).toEqual(['stack1.Queue']);
     });
 
     test('should get cross-stack edges', () => {
       const node3: GraphNode = {
-        id: 'stack2::Topic',
+        id: 'stack2.Topic',
         type: 'AWS::SNS::Topic',
         properties: {},
         stackId: 'stack2'
@@ -203,22 +204,20 @@ describe('CloudFormationGraph', () => {
       graph.addNode(node3);
 
       graph.addEdge({
-        from: 'stack1::Queue',
-        to: 'stack1::Bucket',
-        type: EdgeType.DEPENDS_ON,
-        crossStack: false
+        from: 'stack1.Queue',
+        to: 'stack1.Bucket',
+        type: EdgeType.DEPENDS_ON
       });
 
       graph.addEdge({
-        from: 'stack1::Queue',
-        to: 'stack2::Topic',
-        type: EdgeType.IMPORT_VALUE,
-        crossStack: true
+        from: 'stack1.Queue',
+        to: 'stack2.Topic',
+        type: EdgeType.IMPORT_VALUE
       });
 
       const crossStackEdges = graph.getCrossStackEdges();
       expect(crossStackEdges).toHaveLength(1);
-      expect(crossStackEdges[0].crossStack).toBe(true);
+      expect(isCrossStackEdge(crossStackEdges[0])).toBe(true);
     });
   });
 
@@ -268,7 +267,7 @@ describe('CloudFormationGraph', () => {
 
       const edges = graph.getEdges('stack1.Queue');
       expect(edges[0].to).toBe('stack2.Bucket');
-      expect(edges[0].crossStack).toBe(true);
+      expect(isCrossStackEdge(edges[0])).toBe(true);
       expect(edges[0].type).toBe(EdgeType.IMPORT_VALUE);
     });
 
@@ -296,7 +295,7 @@ describe('CloudFormationGraph', () => {
 
       const edges = graph.getEdges('stack2.Queue');
       expect(edges[0].to).toBe('stack1.Bucket');
-      expect(edges[0].crossStack).toBe(true);
+      expect(isCrossStackEdge(edges[0])).toBe(true);
       expect(edges[0].type).toBe(EdgeType.IMPORT_VALUE);
     });
 
@@ -354,7 +353,7 @@ describe('CloudFormationGraph', () => {
       const edges = graph.getEdges('stack2.Subscription');
       const importEdge = edges.find(e => e.type === EdgeType.IMPORT_VALUE);
       expect(importEdge).toBeDefined();
-      expect(importEdge?.crossStack).toBe(true);
+      expect(importEdge && isCrossStackEdge(importEdge)).toBe(true);
       expect(importEdge?.to).toBe('stack1.Topic');
       expect(importEdge?.exportName).toBeDefined();
     });
@@ -553,13 +552,13 @@ describe('CloudFormationGraph', () => {
 
       graph.addNode(node1);
       graph.addNode(node2);
-      graph.addEdge({ from: 'stack2::Queue', to: 'stack1::Bucket', type: EdgeType.IMPORT_VALUE, crossStack: true });
+      graph.addEdge({ from: 'stack2::Queue', to: 'stack1::Bucket', type: EdgeType.IMPORT_VALUE });
 
       const reversed = graph.opposite();
       const edges = reversed.getCrossStackEdges();
 
       expect(edges).toHaveLength(1);
-      expect(edges[0].crossStack).toBe(true);
+      expect(isCrossStackEdge(edges[0])).toBe(true);
     });
   });
 });

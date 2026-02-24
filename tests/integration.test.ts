@@ -1,4 +1,4 @@
-import { CloudFormationParser, CloudFormationGenerator, parseNodeId, createNodeId } from '../src';
+import { CloudFormationParser, CloudFormationGenerator, parseNodeId, createNodeId, isCrossStackEdge } from '../src';
 import { CloudFormationTemplate, EdgeType } from '../src/types';
 
 describe('Integration Tests', () => {
@@ -302,7 +302,7 @@ describe('Integration Tests', () => {
       // Before move - verify in-stack reference
       const edgesBefore = graph.getEdges('infra.Subscription');
       const refEdgeBefore = edgesBefore.find(e => e.type === EdgeType.REFERENCE);
-      expect(refEdgeBefore?.crossStack).toBeFalsy();
+      expect(refEdgeBefore && !isCrossStackEdge(refEdgeBefore)).toBeTruthy();
 
       // Move subscription to services stack
       graph.moveNode({ stackId: 'infra', logicalId: 'Subscription' }, { stackId: 'services', logicalId: 'Subscription' });
@@ -311,7 +311,7 @@ describe('Integration Tests', () => {
       const edgesAfter = graph.getEdges('services.Subscription');
       const importEdge = edgesAfter.find(e => e.type === EdgeType.IMPORT_VALUE);
       expect(importEdge).toBeDefined();
-      expect(importEdge?.crossStack).toBe(true);
+      expect(importEdge && isCrossStackEdge(importEdge)).toBe(true);
       expect(importEdge?.to).toBe('infra.Topic');
       expect(importEdge?.exportName).toBeDefined();
 

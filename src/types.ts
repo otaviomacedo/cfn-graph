@@ -41,7 +41,6 @@ export interface GraphEdge {
   from: string;
   to: string;
   type: EdgeType;
-  crossStack?: boolean;
   attribute?: string;
   path?: string;
   exportName?: string;

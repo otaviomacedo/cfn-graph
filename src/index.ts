@@ -1,6 +1,7 @@
 export { CloudFormationGraph } from './graph';
 export { CloudFormationParser } from './parser';
 export { CloudFormationGenerator } from './generator';
+export { isCrossStackEdge } from './utils';
 export * from './types';
 
 // Utility functions for working with node locations

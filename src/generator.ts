@@ -1,5 +1,6 @@
 import { CloudFormationTemplate, Resource, EdgeType, Output } from './types';
 import { CloudFormationGraph } from './graph';
+import { isCrossStackEdge } from './utils';
 
 export class CloudFormationGenerator {
   generate(graph: CloudFormationGraph, stackId?: string, metadata?: Partial<CloudFormationTemplate>): CloudFormationTemplate {
@@ -58,7 +59,7 @@ export class CloudFormationGenerator {
         .filter(edge => 
           edge.from === node.id && 
           edge.type === EdgeType.DEPENDS_ON &&
-          !edge.crossStack
+          !isCrossStackEdge(edge)
         )
         .map(edge => this.getLocalId(edge.to));
 
