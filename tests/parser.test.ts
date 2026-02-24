@@ -1,6 +1,4 @@
-import { CloudFormationParser } from '../src/parser';
-import { CloudFormationTemplate, EdgeType } from '../src/types';
-import { isCrossStackEdge } from '../src/utils';
+import { CloudFormationParser, CloudFormationTemplate, EdgeType, isCrossStackEdge } from '../src';
 
 describe('CloudFormationParser', () => {
   let parser: CloudFormationParser;
@@ -230,7 +228,7 @@ describe('CloudFormationParser', () => {
       expect(crossStackEdges.length).toBeGreaterThan(0);
 
       const importEdge = crossStackEdges.find(
-        e => e.type === EdgeType.IMPORT_VALUE && e.from === 'app.SecurityGroup'
+        e => (e.type === EdgeType.REFERENCE || e.type === EdgeType.GET_ATT) && e.from === 'app.SecurityGroup'
       );
       expect(importEdge).toBeDefined();
       expect(importEdge && isCrossStackEdge(importEdge)).toBe(true);
@@ -283,7 +281,7 @@ describe('CloudFormationParser', () => {
       ]);
 
       const crossStackEdges = graph.getCrossStackEdges();
-      const importEdges = crossStackEdges.filter(e => e.type === EdgeType.IMPORT_VALUE);
+      const importEdges = crossStackEdges.filter(e => e.type === EdgeType.REFERENCE || e.type === EdgeType.GET_ATT);
       
       expect(importEdges.length).toBeGreaterThanOrEqual(2);
     });
@@ -427,7 +425,7 @@ describe('CloudFormationParser', () => {
       ]);
 
       // No import edge should exist since export doesn't reference a resource
-      const importEdges = graph.getEdges('app.Bucket').filter(e => e.type === EdgeType.IMPORT_VALUE);
+      const importEdges = graph.getEdges('app.Bucket').filter(e => isCrossStackEdge(e));
       expect(importEdges).toHaveLength(0);
     });
 
@@ -460,7 +458,7 @@ describe('CloudFormationParser', () => {
         { stackId: 'app', template: appStack }
       ]);
 
-      const importEdges = graph.getEdges('app.Queue').filter(e => e.type === EdgeType.IMPORT_VALUE);
+      const importEdges = graph.getEdges('app.Queue').filter(e => isCrossStackEdge(e));
       expect(importEdges).toHaveLength(0);
     });
 
@@ -499,7 +497,7 @@ describe('CloudFormationParser', () => {
       ]);
 
       // Import edge should exist pointing to VPC
-      const importEdges = graph.getEdges('app.SecurityGroup').filter(e => e.type === EdgeType.IMPORT_VALUE);
+      const importEdges = graph.getEdges('app.SecurityGroup').filter(e => isCrossStackEdge(e));
       expect(importEdges).toHaveLength(1);
       expect(importEdges[0].to).toBe('network.VPC');
       expect(importEdges[0].exportName).toBe('NetworkVPC');
@@ -596,7 +594,7 @@ describe('CloudFormationParser', () => {
       ]);
 
       const edges = graph.getEdges('app.SecurityGroup');
-      const importEdge = edges.find(e => e.type === EdgeType.IMPORT_VALUE);
+      const importEdge = edges.find(e => isCrossStackEdge(e));
 
       expect(importEdge).toBeDefined();
       expect(importEdge?.path).toBe('$.Properties.VpcId');

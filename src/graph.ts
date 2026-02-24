@@ -120,18 +120,19 @@ export class CloudFormationGraph {
               shouldKeepEdge = false;
             } else if (edge.type === EdgeType.REFERENCE || edge.type === EdgeType.GET_ATT) {
               edgesToConvert.push({ edge: updatedEdge, targetNode: toNode, targetStackId: toNode.stackId! });
-              updatedEdge.type = EdgeType.IMPORT_VALUE;
               if (edge.attribute) {
                 updatedEdge.attribute = edge.attribute;
               }
             }
           } else {
             // Moving to same stack as target - convert back to in-stack reference
-            if (edge.type === EdgeType.IMPORT_VALUE) {
-              updatedEdge.type = edge.attribute ? EdgeType.GET_ATT : EdgeType.REFERENCE;
-              updatedEdge.exportName = undefined;
-              edgesToRestore.push({ from: newQualifiedId, to: edge.to, type: EdgeType.DEPENDS_ON });
+            if (edge.attribute) {
+              updatedEdge.type = EdgeType.GET_ATT;
+            } else {
+              updatedEdge.type = EdgeType.REFERENCE;
             }
+            updatedEdge.exportName = undefined;
+            edgesToRestore.push({ from: newQualifiedId, to: edge.to, type: EdgeType.DEPENDS_ON });
             if (edge.type === EdgeType.REFERENCE || edge.type === EdgeType.GET_ATT) {
               edgesToRestore.push({ from: newQualifiedId, to: edge.to, type: EdgeType.DEPENDS_ON });
             }
@@ -152,17 +153,18 @@ export class CloudFormationGraph {
               // When the target moves, create export in the NEW stack (where target is moving to)
               const targetEdge = { ...edge, to: newQualifiedId };
               edgesToConvert.push({ edge: targetEdge, targetNode: movedNode, targetStackId: to.stackId });
-              updatedEdge.type = EdgeType.IMPORT_VALUE;
               if (edge.attribute) {
                 updatedEdge.attribute = edge.attribute;
               }
             }
           } else {
             // Target moving to same stack - convert back to in-stack reference  
-            if (edge.type === EdgeType.IMPORT_VALUE) {
-              updatedEdge.type = edge.attribute ? EdgeType.GET_ATT : EdgeType.REFERENCE;
-              updatedEdge.exportName = undefined;
+            if (edge.attribute) {
+              updatedEdge.type = EdgeType.GET_ATT;
+            } else {
+              updatedEdge.type = EdgeType.REFERENCE;
             }
+            updatedEdge.exportName = undefined;
             if (edge.type === EdgeType.REFERENCE || edge.type === EdgeType.GET_ATT) {
               edgesToRestore.push({ from: edge.from, to: newQualifiedId, type: EdgeType.DEPENDS_ON });
             }
@@ -242,7 +244,7 @@ export class CloudFormationGraph {
       // Check if an export name already exists on any edge pointing to this target
       let existingExportName: string | undefined;
       for (const e of this.edges) {
-        if (e.to === targetNode.id && e.exportName && e.type === EdgeType.IMPORT_VALUE) {
+        if (e.to === targetNode.id && e.exportName && (e.type === EdgeType.REFERENCE || e.type === EdgeType.GET_ATT)) {
           if (attribute && e.attribute === attribute) {
             existingExportName = e.exportName;
             break;
@@ -259,7 +261,7 @@ export class CloudFormationGraph {
       }
       
       // Update the edge with the export name
-      const edgeToUpdate = this.edges.find(e => e.from === edge.from && e.to === edge.to && e.type === EdgeType.IMPORT_VALUE);
+      const edgeToUpdate = this.edges.find(e => e.from === edge.from && e.to === edge.to && (e.type === EdgeType.REFERENCE || e.type === EdgeType.GET_ATT));
       if (edgeToUpdate) {
         edgeToUpdate.exportName = existingExportName;
       }

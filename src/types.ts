@@ -60,5 +60,4 @@ export enum EdgeType {
   DEPENDS_ON = 'DependsOn',
   REFERENCE = 'Reference',
   GET_ATT = 'GetAtt',
-  IMPORT_VALUE = 'ImportValue',
 }

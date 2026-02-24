@@ -309,7 +309,7 @@ describe('Integration Tests', () => {
 
       // After move - verify cross-stack import
       const edgesAfter = graph.getEdges('services.Subscription');
-      const importEdge = edgesAfter.find(e => e.type === EdgeType.IMPORT_VALUE);
+      const importEdge = edgesAfter.find(e => (e.type === EdgeType.REFERENCE || e.type === EdgeType.GET_ATT) && isCrossStackEdge(e));
       expect(importEdge).toBeDefined();
       expect(importEdge && isCrossStackEdge(importEdge)).toBe(true);
       expect(importEdge?.to).toBe('infra.Topic');
@@ -471,7 +471,7 @@ describe('Integration Tests', () => {
 
       // Verify edges were created
       const edges = graph.getEdges('stack2.Function');
-      const importEdges = edges.filter(e => e.type === EdgeType.IMPORT_VALUE);
+      const importEdges = edges.filter(e => (e.type === EdgeType.REFERENCE || e.type === EdgeType.GET_ATT) && isCrossStackEdge(e));
       expect(importEdges.length).toBe(2);
 
       // Generate and verify

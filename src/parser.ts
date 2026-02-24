@@ -180,7 +180,7 @@ export class CloudFormationParser {
         graph.addEdge({
           from: resourceId,
           to: exportInfo.nodeId,
-          type: EdgeType.IMPORT_VALUE,
+          type: exportInfo.attribute ? EdgeType.GET_ATT : EdgeType.REFERENCE,
           path,
           exportName: importName,
           attribute: exportInfo.attribute

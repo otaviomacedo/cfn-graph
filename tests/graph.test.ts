@@ -212,7 +212,7 @@ describe('CloudFormationGraph', () => {
       graph.addEdge({
         from: 'stack1.Queue',
         to: 'stack2.Topic',
-        type: EdgeType.IMPORT_VALUE
+        type: EdgeType.REFERENCE
       });
 
       const crossStackEdges = graph.getCrossStackEdges();
@@ -268,7 +268,7 @@ describe('CloudFormationGraph', () => {
       const edges = graph.getEdges('stack1.Queue');
       expect(edges[0].to).toBe('stack2.Bucket');
       expect(isCrossStackEdge(edges[0])).toBe(true);
-      expect(edges[0].type).toBe(EdgeType.IMPORT_VALUE);
+      expect(edges[0].type).toBe(EdgeType.REFERENCE);
     });
 
     test('should delete DEPENDS_ON edges when moving its target', () => {
@@ -296,7 +296,7 @@ describe('CloudFormationGraph', () => {
       const edges = graph.getEdges('stack2.Queue');
       expect(edges[0].to).toBe('stack1.Bucket');
       expect(isCrossStackEdge(edges[0])).toBe(true);
-      expect(edges[0].type).toBe(EdgeType.IMPORT_VALUE);
+      expect(edges[0].type).toBe(EdgeType.REFERENCE);
     });
 
     test('should delete DEPENDS_ON edges when moving its source', () => {
@@ -351,7 +351,7 @@ describe('CloudFormationGraph', () => {
 
       // Check that edge was converted to IMPORT_VALUE
       const edges = graph.getEdges('stack2.Subscription');
-      const importEdge = edges.find(e => e.type === EdgeType.IMPORT_VALUE);
+      const importEdge = edges.find(e => (e.type === EdgeType.REFERENCE || e.type === EdgeType.GET_ATT) && isCrossStackEdge(e));
       expect(importEdge).toBeDefined();
       expect(importEdge && isCrossStackEdge(importEdge)).toBe(true);
       expect(importEdge?.to).toBe('stack1.Topic');
@@ -552,7 +552,7 @@ describe('CloudFormationGraph', () => {
 
       graph.addNode(node1);
       graph.addNode(node2);
-      graph.addEdge({ from: 'stack2::Queue', to: 'stack1::Bucket', type: EdgeType.IMPORT_VALUE });
+      graph.addEdge({ from: 'stack2::Queue', to: 'stack1::Bucket', type: EdgeType.REFERENCE });
 
       const reversed = graph.opposite();
       const edges = reversed.getCrossStackEdges();

@@ -75,7 +75,7 @@ export class CloudFormationGenerator {
       const exportsNeeded = new Map<string, { nodeId: string; attribute?: string }>();
       
       for (const edge of graph.getCrossStackEdges()) {
-        if (edge.type === EdgeType.IMPORT_VALUE) {
+        if (edge.type === EdgeType.REFERENCE || edge.type === EdgeType.GET_ATT) {
           const targetNode = graph.getNode(edge.to);
           if (targetNode && targetNode.stackId === stackId) {
             const exportName = edge.exportName || this.generateExportName(stackId, edge.to, edge.attribute);
@@ -111,7 +111,7 @@ export class CloudFormationGenerator {
     graph: CloudFormationGraph
   ): Record<string, any> {
     const importEdges = graph.getEdges(nodeId).filter(
-      edge => edge.from === nodeId && edge.type === EdgeType.IMPORT_VALUE
+      edge => edge.from === nodeId && (edge.type === EdgeType.REFERENCE || edge.type === EdgeType.GET_ATT) && isCrossStackEdge(edge)
     );
 
     if (importEdges.length === 0) {

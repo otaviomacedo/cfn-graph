@@ -123,7 +123,7 @@ describe('CloudFormationGenerator', () => {
       graph.addEdge({
         from: 'stack2.SG',
         to: 'stack1.VPC',
-        type: EdgeType.IMPORT_VALUE,
+        type: EdgeType.REFERENCE,
         exportName: 'MyVPCId'
       });
 
