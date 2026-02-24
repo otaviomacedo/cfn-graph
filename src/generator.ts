@@ -29,17 +29,10 @@ export class CloudFormationGenerator {
     // Generate resources from nodes
     for (const node of nodes) {
       const localId = this.getLocalId(node.id);
-      
-      // Transform properties to handle cross-stack references
-      const transformedProperties = this.transformProperties(
-        node.properties, 
-        node.id, 
-        graph
-      );
 
       const resource: Resource = {
         Type: node.type,
-        Properties: transformedProperties
+        Properties: node.properties ? JSON.parse(JSON.stringify(node.properties)) : {}
       };
 
       if (node.metadata) {
@@ -65,6 +58,34 @@ export class CloudFormationGenerator {
 
       if (dependencies.length > 0) {
         resource.DependsOn = dependencies.length === 1 ? dependencies[0] : dependencies;
+      }
+
+      // Apply reference edges to properties
+      const refEdges = graph.getEdges(node.id).filter(
+        edge => edge.from === node.id && (edge.type === EdgeType.REFERENCE || edge.type === EdgeType.GET_ATT)
+      );
+
+      for (const edge of refEdges) {
+        if (!edge.path) continue;
+        
+        const isCrossStack = isCrossStackEdge(edge);
+        const targetLocalId = this.getLocalId(edge.to);
+        
+        let refValue: any;
+        if (isCrossStack) {
+          const exportName = edge.exportName || this.generateExportName(
+            graph.getNode(edge.to)?.stackId || '',
+            edge.to,
+            edge.attribute
+          );
+          refValue = { 'Fn::ImportValue': exportName };
+        } else {
+          refValue = edge.type === EdgeType.GET_ATT
+            ? { 'Fn::GetAtt': [targetLocalId, edge.attribute!] }
+            : { Ref: targetLocalId };
+        }
+
+        this.setValueAtPath(resource.Properties, edge.path, refValue);
       }
 
       template.Resources[localId] = resource;
@@ -105,84 +126,37 @@ export class CloudFormationGenerator {
     return template;
   }
 
-  private transformProperties(
-    properties: Record<string, any>,
-    nodeId: string,
-    graph: CloudFormationGraph
-  ): Record<string, any> {
-    const importEdges = graph.getEdges(nodeId).filter(
-      edge => edge.from === nodeId && (edge.type === EdgeType.REFERENCE || edge.type === EdgeType.GET_ATT) && isCrossStackEdge(edge)
-    );
+  private setValueAtPath(obj: any, path: string, value: any): void {
+    // Remove $.Properties prefix if present
+    const cleanPath = path.startsWith('$.Properties.') ? path.substring('$.Properties.'.length) : path;
+    if (!cleanPath) return;
+    
+    const parts = cleanPath.split('.');
+    let current = obj;
 
-    if (importEdges.length === 0) {
-      return properties;
-    }
-
-    const importMap = new Map<string, string>();
-    for (const edge of importEdges) {
-      const exportName = edge.exportName || this.generateExportName(
-        graph.getNode(edge.to)?.stackId || '',
-        edge.to,
-        edge.attribute
-      );
+    for (let i = 0; i < parts.length - 1; i++) {
+      const part = parts[i];
+      const arrayMatch = part.match(/^(.+)\[(\d+)\]$/);
       
-      const key = edge.attribute 
-        ? `${this.getLocalId(edge.to)}::${edge.attribute}`
-        : this.getLocalId(edge.to);
-      
-      importMap.set(key, exportName);
-    }
-
-    return this.replaceRefs(properties, importMap);
-  }
-
-  private replaceRefs(
-    obj: any,
-    importMap: Map<string, string>
-  ): any {
-    if (obj === null || obj === undefined) {
-      return obj;
-    }
-
-    if (typeof obj !== 'object') {
-      return obj;
-    }
-
-    if (Array.isArray(obj)) {
-      return obj.map(item => this.replaceRefs(item, importMap));
-    }
-
-    // Check if this is a Ref that needs to be converted
-    if (obj.Ref && typeof obj.Ref === 'string') {
-      const exportName = importMap.get(obj.Ref);
-      if (exportName) {
-        return { 'Fn::ImportValue': exportName };
+      if (arrayMatch) {
+        const key = arrayMatch[1];
+        const index = parseInt(arrayMatch[2], 10);
+        current = current[key][index];
+      } else {
+        current = current[part];
       }
     }
 
-    // Check if this is a Fn::GetAtt that needs to be converted
-    if (obj['Fn::GetAtt']) {
-      const attr = obj['Fn::GetAtt'];
-      if (Array.isArray(attr) && attr.length >= 2) {
-        const target = attr[0];
-        const attribute = attr[1];
-        
-        if (typeof target === 'string') {
-          const key = `${target}::${attribute}`;
-          const exportName = importMap.get(key);
-          if (exportName) {
-            return { 'Fn::ImportValue': exportName };
-          }
-        }
-      }
+    const lastPart = parts[parts.length - 1];
+    const arrayMatch = lastPart.match(/^(.+)\[(\d+)\]$/);
+    
+    if (arrayMatch) {
+      const key = arrayMatch[1];
+      const index = parseInt(arrayMatch[2], 10);
+      current[key][index] = value;
+    } else {
+      current[lastPart] = value;
     }
-
-    // Recursively process object properties
-    const result: Record<string, any> = {};
-    for (const [key, value] of Object.entries(obj)) {
-      result[key] = this.replaceRefs(value, importMap);
-    }
-    return result;
   }
 
   generateMultiple(graph: CloudFormationGraph): Map<string, CloudFormationTemplate> {
